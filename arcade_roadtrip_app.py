@@ -29,6 +29,57 @@ OSRM_ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/{lon1},{lat1}
 ACTIVE_STATUSES = ("active", "unverified", "uncertain", "matched", "needs_review")
 DEFAULT_MAX_DETOUR_MILES = 15.0
 DEFAULT_LIMIT = 25
+CONTINENTAL_US_STATES = (
+    "AL",
+    "AZ",
+    "AR",
+    "CA",
+    "CO",
+    "CT",
+    "DE",
+    "FL",
+    "GA",
+    "ID",
+    "IL",
+    "IN",
+    "IA",
+    "KS",
+    "KY",
+    "LA",
+    "ME",
+    "MD",
+    "MA",
+    "MI",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "NV",
+    "NH",
+    "NJ",
+    "NM",
+    "NY",
+    "NC",
+    "ND",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VT",
+    "VA",
+    "WA",
+    "WV",
+    "WI",
+    "WY",
+    "DC",
+)
 
 app = Flask(__name__)
 
@@ -53,6 +104,14 @@ class CandidateLocation:
     pinball_games: int
     rhythm_games: int
     source_tags: str
+
+
+@dataclass(frozen=True)
+class Bounds:
+    min_lat: float
+    max_lat: float
+    min_lon: float
+    max_lon: float
 
 
 def connect(readonly: bool = False) -> sqlite3.Connection:
@@ -180,12 +239,36 @@ def project_distance_miles(point: Point, route_points: list[Point]) -> float:
     return min(haversine_miles(point, route_point) for route_point in route_points)
 
 
-def load_candidate_locations(scope: str = "UT") -> list[CandidateLocation]:
+def route_bounds(route_points: list[Point], max_detour_miles: float) -> Bounds:
+    min_lat = min(point.lat for point in route_points)
+    max_lat = max(point.lat for point in route_points)
+    min_lon = min(point.lon for point in route_points)
+    max_lon = max(point.lon for point in route_points)
+    lat_padding = max_detour_miles / 69.0
+    mid_lat = (min_lat + max_lat) / 2
+    miles_per_lon_degree = max(20.0, 69.0 * math.cos(math.radians(mid_lat)))
+    lon_padding = max_detour_miles / miles_per_lon_degree
+    return Bounds(
+        min_lat=min_lat - lat_padding,
+        max_lat=max_lat + lat_padding,
+        min_lon=min_lon - lon_padding,
+        max_lon=max_lon + lon_padding,
+    )
+
+
+def load_candidate_locations(scope: str = "US", bounds: Optional[Bounds] = None) -> list[CandidateLocation]:
     params: list[Any] = list(ACTIVE_STATUSES)
-    state_clause = ""
-    if scope.upper() != "US":
+    scope = scope.upper()
+    if scope == "US":
+        state_clause = f"AND l.state IN ({','.join('?' for _ in CONTINENTAL_US_STATES)})"
+        params.extend(CONTINENTAL_US_STATES)
+    else:
         state_clause = "AND l.state = ?"
-        params.append(scope.upper())
+        params.append(scope)
+    bounds_clause = ""
+    if bounds:
+        bounds_clause = "AND l.latitude BETWEEN ? AND ? AND l.longitude BETWEEN ? AND ?"
+        params.extend([bounds.min_lat, bounds.max_lat, bounds.min_lon, bounds.max_lon])
     with connect(readonly=True) as conn:
         rows = conn.execute(
             f"""
@@ -218,6 +301,7 @@ def load_candidate_locations(scope: str = "UT") -> list[CandidateLocation]:
             WHERE COALESCE(ls.status, 'active') IN ({','.join('?' for _ in ACTIVE_STATUSES)})
               AND l.latitude IS NOT NULL AND l.longitude IS NOT NULL
               {state_clause}
+              {bounds_clause}
             GROUP BY l.location_id
             """,
             params,
@@ -225,51 +309,128 @@ def load_candidate_locations(scope: str = "UT") -> list[CandidateLocation]:
     return [CandidateLocation(**dict(row)) for row in rows]
 
 
-def highlighted_games(location_id: int) -> list[dict[str, Any]]:
+def batch_highlighted_games(location_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
+    if not location_ids:
+        return {}
+    placeholders = ",".join("?" for _ in location_ids)
     with connect(readonly=True) as conn:
-        rows = conn.execute(
-            """
-            WITH active_ut_game_counts AS (
-                SELECT lg.game_id, COUNT(DISTINCT lg.location_id) AS ut_location_count
-                FROM location_games lg
-                JOIN locations l ON l.location_id = lg.location_id
-                LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
-                WHERE l.state = 'UT'
-                  AND COALESCE(ls.status, 'active') IN ('active', 'unverified', 'uncertain', 'matched', 'needs_review')
-                GROUP BY lg.game_id
-            )
-            SELECT g.game_id, g.name, COALESCE(augc.ut_location_count, 0) AS ut_location_count
+        inventory_rows = conn.execute(
+            f"""
+            SELECT
+                lg.location_id,
+                sl.state AS location_state,
+                g.game_id,
+                g.name,
+                lower(g.name) AS game_key,
+                COALESCE(lg.cabinet_type, '') AS cabinet_type
+            FROM location_games lg
+            JOIN locations sl ON sl.location_id = lg.location_id
+            JOIN games g ON g.game_id = lg.game_id
+            WHERE lg.location_id IN ({placeholders})
+            """,
+            location_ids,
+        ).fetchall()
+
+        game_keys = sorted({row["game_key"] for row in inventory_rows})
+        if not game_keys:
+            return {location_id: [] for location_id in location_ids}
+
+        game_placeholders = ",".join("?" for _ in game_keys)
+        state_placeholders = ",".join("?" for _ in CONTINENTAL_US_STATES)
+        us_count_rows = conn.execute(
+            f"""
+            SELECT lower(g.name) AS game_key, COUNT(DISTINCT lg.location_id) AS us_location_count
             FROM location_games lg
             JOIN games g ON g.game_id = lg.game_id
-            LEFT JOIN active_ut_game_counts augc ON augc.game_id = g.game_id
-            WHERE lg.location_id = ?
-            ORDER BY
-                CASE WHEN COALESCE(augc.ut_location_count, 0) = 1 THEN 0 ELSE 1 END,
-                CASE
-                    WHEN lower(COALESCE(lg.cabinet_type, '')) = 'music game' THEN 0
-                    WHEN lg.cabinet_type = 'Pinball' THEN 1
-                    ELSE 2
-                END,
-                g.name
+            JOIN locations l ON l.location_id = lg.location_id
+            LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
+            WHERE lower(g.name) IN ({game_placeholders})
+              AND l.state IN ({state_placeholders})
+              AND COALESCE(ls.status, 'active') IN ('active', 'unverified', 'uncertain', 'matched', 'needs_review')
+            GROUP BY lower(g.name)
             """,
-            (location_id,),
+            [*game_keys, *CONTINENTAL_US_STATES],
         ).fetchall()
-    return [
-        {
-            "game_id": row["game_id"],
-            "name": row["name"],
-            "rare_utah": row["ut_location_count"] == 1,
-            "ut_location_count": row["ut_location_count"],
-        }
-        for row in rows
-    ]
+        states = sorted({row["location_state"] for row in inventory_rows if row["location_state"]})
+        state_counts: dict[tuple[str, str], int] = {}
+        if states:
+            selected_state_placeholders = ",".join("?" for _ in states)
+            state_count_rows = conn.execute(
+                f"""
+                SELECT lower(g.name) AS game_key, l.state, COUNT(DISTINCT lg.location_id) AS state_location_count
+                FROM location_games lg
+                JOIN games g ON g.game_id = lg.game_id
+                JOIN locations l ON l.location_id = lg.location_id
+                LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
+                WHERE lower(g.name) IN ({game_placeholders})
+                  AND l.state IN ({selected_state_placeholders})
+                  AND COALESCE(ls.status, 'active') IN ('active', 'unverified', 'uncertain', 'matched', 'needs_review')
+                GROUP BY lower(g.name), l.state
+                """,
+                [*game_keys, *states],
+            ).fetchall()
+            state_counts = {
+                (row["game_key"], row["state"]): row["state_location_count"]
+                for row in state_count_rows
+            }
+
+    us_counts = {row["game_key"]: row["us_location_count"] for row in us_count_rows}
+    by_location: dict[int, list[dict[str, Any]]] = {location_id: [] for location_id in location_ids}
+    for row in inventory_rows:
+        us_location_count = us_counts.get(row["game_key"], 0)
+        state_location_count = state_counts.get((row["game_key"], row["location_state"]), 0)
+        by_location[row["location_id"]].append(
+            {
+                "game_id": row["game_id"],
+                "name": row["name"],
+                "rare_us": us_location_count < 10,
+                "unique_state": state_location_count == 1,
+                "us_location_count": us_location_count,
+                "state_location_count": state_location_count,
+                "location_state": row["location_state"],
+                "cabinet_type": row["cabinet_type"],
+            }
+        )
+
+    def sort_key(game: dict[str, Any]) -> tuple[int, int, int, str]:
+        cabinet_type = (game.get("cabinet_type") or "").lower()
+        if cabinet_type == "music game":
+            type_order = 0
+        elif game.get("cabinet_type") == "Pinball":
+            type_order = 1
+        else:
+            type_order = 2
+        return (
+            0 if game["rare_us"] else 1,
+            0 if game["unique_state"] else 1,
+            type_order,
+            game["name"],
+        )
+
+    for games in by_location.values():
+        games.sort(key=sort_key)
+        for game in games:
+            game.pop("cabinet_type", None)
+    return by_location
+
+
+def highlighted_games(location_id: int) -> list[dict[str, Any]]:
+    return batch_highlighted_games([location_id]).get(location_id, [])
+
+
+def attach_highlights(stops: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    highlights = batch_highlighted_games([stop["location_id"] for stop in stops])
+    for stop in stops:
+        stop["highlights"] = highlights.get(stop["location_id"], [])
+    return stops
 
 
 def plan_stops(route: dict[str, Any], max_detour_miles: float, scope: str, limit: int) -> list[dict[str, Any]]:
     coords = route["routes"][0]["geometry"]["coordinates"]
     route_points = [Point(lat=lat, lon=lon) for lon, lat in coords]
+    bounds = route_bounds(route_points, max_detour_miles)
     results = []
-    for loc in load_candidate_locations(scope):
+    for loc in load_candidate_locations(scope, bounds):
         point = Point(lat=float(loc.latitude), lon=float(loc.longitude))
         route_distance = project_distance_miles(point, route_points)
         estimated_detour = route_distance * 2
@@ -294,10 +455,9 @@ def plan_stops(route: dict[str, Any], max_detour_miles: float, scope: str, limit
                 "route_distance_miles": round(route_distance, 2),
                 "estimated_detour_miles": round(estimated_detour, 2),
                 "score": round(score, 2),
-                "highlights": highlighted_games(loc.location_id),
             }
         )
-    return sorted(results, key=lambda row: row["score"], reverse=True)[:limit]
+    return attach_highlights(sorted(results, key=lambda row: row["score"], reverse=True)[:limit])
 
 
 @app.get("/")
@@ -320,7 +480,7 @@ def api_route_plan():
     destination = Point(float(payload["destination"]["lat"]), float(payload["destination"]["lon"]))
     max_detour_miles = float(payload.get("max_detour_miles", DEFAULT_MAX_DETOUR_MILES))
     limit = int(payload.get("limit", DEFAULT_LIMIT))
-    scope = payload.get("scope", "UT")
+    scope = payload.get("scope", "US")
     route = route_between(origin, destination)
     if not route.get("routes"):
         return jsonify({"error": "No route found", "route_response": route}), 502
@@ -355,49 +515,106 @@ INDEX_HTML = r"""
   <title>Arcade Road Trip</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; color: #17202a; }
-    main { display: grid; grid-template-columns: 390px 1fr; min-height: 100vh; }
-    aside { padding: 18px; border-right: 1px solid #d8dee4; overflow: auto; }
-    h1 { font-size: 26px; margin: 0 0 14px; }
-    label { display: block; font-size: 13px; font-weight: 650; margin-top: 12px; }
-    input, button { width: 100%; box-sizing: border-box; font: inherit; padding: 10px; margin-top: 5px; }
-    button { cursor: pointer; border: 0; background: #0d6efd; color: white; border-radius: 6px; font-weight: 700; }
+    html, body { height: 100%; }
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; color: #17202a; overflow: hidden; }
+    main { display: grid; grid-template-columns: minmax(480px, 1fr) minmax(480px, 1fr); height: 100vh; width: 100vw; overflow: hidden; }
+    aside { border-right: 1px solid #d8dee4; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: white; }
+    .controls { flex: 0 0 auto; padding: 14px 16px 10px; border-bottom: 1px solid #e6ebf0; }
+    .results-shell { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .results { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px 18px; scroll-padding-top: 12px; }
+    h1 { font-size: 24px; margin: 0 0 10px; }
+    label { display: block; font-size: 12px; font-weight: 650; margin: 0 0 4px; }
+    input, button { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 9px; margin: 0; }
+    input { min-width: 0; }
+    button { cursor: pointer; border: 0; background: #0d6efd; color: white; border-radius: 6px; font-weight: 700; white-space: nowrap; }
+    button:disabled { cursor: wait; opacity: 0.72; }
     button.secondary { background: #425466; }
-    #map { min-height: 100vh; }
+    .trip-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: end; }
+    .action-row { display: grid; grid-template-columns: minmax(130px, 180px) minmax(120px, 170px) minmax(110px, 150px); gap: 8px; align-items: end; margin-top: 8px; }
+    .detour-field { min-width: 0; }
+    .detour-field label { display: flex; justify-content: space-between; gap: 8px; }
+    .section-title { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px 8px; border-bottom: 1px solid #edf1f5; }
+    .section-title h2 { font-size: 16px; margin: 0; }
+    #map { height: 100vh; min-width: 0; }
     .stop { border-top: 1px solid #e6ebf0; padding: 12px 0; cursor: pointer; border-radius: 6px; }
     .stop:hover { background: #f7f9fb; }
     .stop.active { background: #e8f1ff; outline: 2px solid #0d6efd; outline-offset: -2px; padding-left: 8px; padding-right: 8px; }
     .stop h2 { font-size: 17px; margin: 0 0 4px; }
     .meta { color: #51606d; font-size: 13px; }
-    .games { column-count: 2; column-gap: 18px; font-size: 13px; margin-top: 8px; }
+    .games { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); column-gap: 16px; row-gap: 2px; font-size: 13px; margin-top: 8px; }
     .game { break-inside: avoid; display: block; line-height: 1.25; margin: 0 0 4px; }
-    .rare-game { color: #d000ff; font-weight: 800; }
-    @media (min-width: 1250px) { .games { column-count: 3; } }
-    @media (max-width: 800px) { .games { column-count: 1; } }
+    .rare-us { color: #d000ff; font-weight: 800; }
+    .unique-state { font-weight: 800; }
+    .machine-count { color: #51606d; font-size: 11px; font-weight: 650; margin-left: 3px; }
+    .common-game { color: #51606d; font-weight: 400; }
+    .legend { color: #51606d; font-size: 12px; line-height: 1.35; display: flex; flex-wrap: wrap; gap: 8px; }
     .error { color: #b00020; margin-top: 10px; }
-    @media (max-width: 800px) { main { grid-template-columns: 1fr; } #map { min-height: 55vh; } }
+    .loading { display: flex; align-items: center; gap: 10px; color: #425466; padding: 18px 0; font-weight: 650; }
+    .car-track { width: 70px; height: 24px; position: relative; overflow: hidden; border-bottom: 2px dashed #ccd6df; }
+    .car { position: absolute; left: -34px; bottom: 4px; width: 26px; height: 10px; background: #0d6efd; border-radius: 7px 9px 4px 4px; animation: drive 1.35s linear infinite; }
+    .car::before { content: ""; position: absolute; left: 7px; top: -6px; width: 12px; height: 7px; background: #7fb3ff; border-radius: 7px 7px 0 0; }
+    .car::after { content: ""; position: absolute; left: 4px; bottom: -4px; width: 4px; height: 4px; background: #17202a; border-radius: 50%; box-shadow: 14px 0 0 #17202a; }
+    @keyframes drive { from { transform: translateX(0); } to { transform: translateX(106px); } }
+    @media (max-width: 800px) {
+      body { overflow: auto; }
+      main { grid-template-columns: 1fr; grid-template-rows: minmax(320px, 52vh) minmax(0, 48vh); height: 100vh; }
+      aside { grid-row: 2; border-right: 0; border-top: 1px solid #d8dee4; }
+      #map { grid-row: 1; height: 100%; min-height: 0; }
+      .controls { padding: 12px 14px 10px; }
+      .results { padding: 0 14px 14px; }
+      .section-title { padding: 10px 14px 8px; align-items: flex-start; flex-direction: column; gap: 4px; }
+      h1 { font-size: 22px; margin-bottom: 8px; }
+      .trip-grid, .action-row { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
 <main>
   <aside>
-    <h1>Arcade Road Trip</h1>
-    <label>Origin</label>
-    <input id="origin" value="South Jordan, UT" placeholder="South Jordan, UT" />
-    <button class="secondary" id="current">Use current location</button>
-    <label>Destination</label>
-    <input id="destination" value="Ogden, UT" placeholder="Ogden, UT" />
-    <label>Max detour miles: <span id="detourLabel">15</span></label>
-    <input id="detour" type="range" min="2" max="60" value="15" />
-    <button id="plan">Plan trip</button>
-    <div id="message" class="error"></div>
-    <div id="stops"></div>
+    <div class="controls">
+      <h1>Arcade Road Trip</h1>
+      <div class="trip-grid">
+        <div>
+          <label>Origin</label>
+          <input id="origin" value="South Jordan, UT" placeholder="South Jordan, UT" />
+        </div>
+        <div>
+          <label>Destination</label>
+          <input id="destination" value="Ogden, UT" placeholder="Ogden, UT" />
+        </div>
+      </div>
+      <div class="action-row">
+        <button class="secondary" id="current">Use current location</button>
+        <div class="detour-field">
+          <label><span>Max detour</span><span><span id="detourLabel">15</span> mi</span></label>
+          <input id="detour" type="range" min="2" max="60" value="15" />
+        </div>
+        <button id="plan">Plan trip</button>
+      </div>
+      <div id="message" class="error"></div>
+    </div>
+    <div class="results-shell">
+      <div class="section-title">
+        <h2>Arcades:</h2>
+        <div class="legend">
+          <span class="rare-us">Under 10 in U.S.</span>
+          <span class="unique-state">Only one in state</span>
+          <span class="common-game">more common</span>
+        </div>
+      </div>
+      <div id="stops" class="results"></div>
+    </div>
   </aside>
   <div id="map"></div>
 </main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const map = L.map('map').setView([40.76, -111.89], 8);
+const continentalBounds = L.latLngBounds([24.396308, -124.848974], [49.384358, -66.885444]);
+const map = L.map('map', {
+  maxBounds: continentalBounds,
+  maxBoundsViscosity: 1.0,
+  minZoom: 4
+}).setView([39.5, -98.35], 4);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '&copy; OpenStreetMap contributors'
@@ -417,7 +634,13 @@ function escapeHtml(value) {
 function renderHighlights(highlights) {
   return highlights.map(game => {
     const name = escapeHtml(game.name);
-    const content = game.rare_utah ? `<strong class="rare-game" title="Only known Utah location">${name}</strong>` : name;
+    let content = name;
+    if (game.rare_us) {
+      const count = `<span class="machine-count">(${game.us_location_count} US)</span>`;
+      content = `<strong class="rare-us" title="Known at ${game.us_location_count} active continental U.S. location${game.us_location_count === 1 ? '' : 's'}">${name}${count}</strong>`;
+    } else if (game.unique_state) {
+      content = `<strong class="unique-state" title="Only known active ${escapeHtml(game.location_state)} location">${name}</strong>`;
+    }
     return `<span class="game">${content}</span>`;
   }).join('');
 }
@@ -431,7 +654,10 @@ function selectStop(locationId, options = {}) {
   const card = document.querySelector(`.stop[data-location-id="${locationId}"]`);
   if (card) {
     card.classList.add('active');
-    if (options.scroll !== false) card.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+    if (options.scroll !== false) {
+      const results = $('stops');
+      results.scrollTo({top: card.offsetTop - results.offsetTop, behavior: 'smooth'});
+    }
   }
   const marker = markerByLocationId.get(Number(locationId));
   if (marker) {
@@ -451,20 +677,26 @@ async function geocode(text, label) {
 }
 $('plan').addEventListener('click', async () => {
   $('message').textContent = '';
-  $('stops').innerHTML = '';
+  $('stops').innerHTML = `
+    <div class="loading">
+      <span>Planning your trip...</span>
+      <span class="car-track" aria-hidden="true"><span class="car"></span></span>
+    </div>`;
+  $('plan').disabled = true;
+  $('plan').textContent = 'Planning...';
   try {
     const origin = await geocode($('origin').value, 'starting point');
     const destination = await geocode($('destination').value, 'destination');
     const res = await fetch('/api/route-plan', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({origin, destination, max_detour_miles: Number($('detour').value), scope: 'UT', limit: 25})
+      body: JSON.stringify({origin, destination, max_detour_miles: Number($('detour').value), scope: 'US', limit: 25})
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Route failed');
     if (routeLayer) map.removeLayer(routeLayer);
     markers.forEach(m => map.removeLayer(m)); markers = []; markerByLocationId = new Map();
     routeLayer = L.geoJSON(data.route.geometry, {style: {color: '#0d6efd', weight: 5}}).addTo(map);
-    map.fitBounds(routeLayer.getBounds(), {padding: [24, 24]});
+    map.fitBounds(routeLayer.getBounds(), {padding: [24, 24], maxZoom: 12});
     data.stops.forEach(stop => {
       const marker = L.marker([stop.latitude, stop.longitude]).addTo(map).bindPopup(`<b>${stop.name}</b><br>${stop.city}<br>${stop.estimated_detour_miles} mi detour`);
       marker.on('click', () => selectStop(stop.location_id, {pan: false}));
@@ -486,7 +718,13 @@ $('plan').addEventListener('click', async () => {
         }
       });
     });
-  } catch (err) { $('message').textContent = err.message; }
+  } catch (err) {
+    $('message').textContent = err.message;
+    $('stops').innerHTML = '';
+  } finally {
+    $('plan').disabled = false;
+    $('plan').textContent = 'Plan trip';
+  }
 });
 </script>
 </body>
