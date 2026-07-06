@@ -1,0 +1,340 @@
+# Arcade Road Trip Agent Notes
+
+This workspace contains the local Arcade Road Trip prototype plus a curated SQLite arcade-location database. The data began with Aurcade, then merged Pinball Map and Zenius -I- vanisher sources for trip-planning and arcade discovery.
+
+## Important Files
+
+- `aurcade_locations.sqlite`: canonical working database.
+- `aurcade_locations.baseline_2026-07-05_pinballmap.sqlite`: backup made before
+  the Pinball Map import.
+- `scrape_aurcade_locations.py`: Aurcade scraper and original schema creator.
+- `import_pinballmap_locations.py`: Pinball Map CSV transformer/importer.
+- `import_ziv_locations.py`: Zenius -I- vanisher Utah location/machine importer.
+- `merge_ziv_machines.py`: second-pass ZIv machine inventory merger for
+  already-linked Utah locations.
+- `arcade_query.py`: read-only query CLI intended for Codex/LLM use.
+- `arcade_roadtrip_app.py`: local Flask route-planning prototype for Arcade Road Trip.
+- `verify_locations_osm.py`: OpenStreetMap/Nominatim verification probe that
+  records evidence in sidecar tables.
+- `validate_pinballmap_locations.py`: Pinball Map API validation for locations
+  that have a known Pinball Map id.
+- `validate_ziv_locations.py`: Zenius -I- vanisher validation for U.S.
+  arcade/rhythm/motion-game location coverage.
+- `location_2026-07-05_15h22m53.csv`: Pinball Map Utah export that was imported.
+- `tests/`: unit tests for parser/import/query behavior.
+
+## Database Conventions
+
+The original schema is Aurcade-native:
+
+- `locations.location_id` is an Aurcade location id for positive ids.
+- `games.game_id` is an Aurcade game id for positive ids.
+- `location_games` joins locations to games.
+
+Imported source-only rows use deterministic negative ids so they do not collide
+with Aurcade ids:
+
+- Pinball Map location id `N` becomes `-(1000000000 + N)`.
+- Pinball Map machine id `N` becomes `-(1000000000 + N)`.
+- ZIv location id `N` becomes `-(2000000000 + N)`.
+- ZIv game id `N` becomes `-(2000000000 + N)`.
+
+Do not add columns casually. Current import/query tooling intentionally uses the
+existing tables and columns.
+
+Location verification/status data lives in sidecar tables so the imported source
+schema stays intact:
+
+- `location_verifications`: append-only-ish evidence from external probes such
+  as Nominatim. These rows are review leads, not automatic closure decisions.
+- `location_statuses`: current curated status used by `arcade_query.py`.
+  Locations with `closed` or `replaced` status are excluded by default from
+  canned query commands.
+- `pinballmap_location_links`: local location id to Pinball Map location id
+  links discovered from Pinball Map source URLs, manual overrides, and the
+  imported CSV.
+- `ziv_location_links`: local location id to Zenius -I- vanisher arcade id
+  links discovered by fuzzy matching ZIv's U.S. arcade directory against local
+  U.S. locations.
+
+Known curated status:
+
+- Aurcade location `1505` Atomic Arcade, The in Holladay is marked `replaced`
+  by Cruzrs. The user confirmed Cruzrs took over the same space.
+- Aurcade locations `797` Hollywood Connection in West Valley City, `1461`
+  Planet Play & Buffet in Draper, and `4087` Funky Munky Arcade in Cedar City
+  are marked `closed`. The user confirmed all three have been closed for
+  several years.
+- Pinball Map-only location `-1000022804` Nomad Cafe in Kanab is marked
+  `closed`. Pinball Map validation returned `pinballmap_not_found` for
+  Pinball Map id `22804`, and the user researched that the cafe closed in
+  February 2026.
+
+
+## Local Route Prototype
+
+Run the local prototype with:
+
+```bash
+python3 arcade_roadtrip_app.py
+```
+
+Then open `http://127.0.0.1:5000`. The app uses Leaflet/OpenStreetMap tiles, cached Nominatim geocoding for explicit typed searches, and OSRM demo routing. Treat these public services as local/light-use prototype dependencies only; keep geocoding cached and avoid autocomplete or bulk requests.
+
+## Querying the Data
+
+Prefer `arcade_query.py` for interactive analysis. It opens the database in
+read-only mode and returns Markdown by default.
+
+Examples:
+
+```bash
+python3 arcade_query.py summary
+python3 arcade_query.py city-summary --state UT --limit 10
+python3 arcade_query.py locations "Quarters"
+python3 arcade_query.py games "Godzilla"
+python3 arcade_query.py where Godzilla --limit 10
+python3 arcade_query.py inventory "Nickel Mania Murray"
+python3 arcade_query.py nearby --lat 40.7608 --lon -111.891 --miles 10
+python3 arcade_query.py compare-locations "Quarters" "Kiitos"
+python3 arcade_query.py inactive --state UT
+python3 arcade_query.py verification-report --state UT --limit 40
+```
+
+Raw SQL is available for one read-only statement at a time:
+
+```bash
+python3 arcade_query.py sql "SELECT city, COUNT(*) AS locations FROM locations WHERE state='UT' GROUP BY city"
+```
+
+Use `--format json` when downstream computation is easier:
+
+```bash
+python3 arcade_query.py games "Star Wars Comic Art" --format json --limit 5
+```
+
+Global flags such as `--format` and `--db` may appear before or after the
+subcommand.
+
+By default, canned query commands exclude locations marked inactive in
+`location_statuses`. Use `--include-inactive` to inspect raw/historical rows:
+
+```bash
+python3 arcade_query.py summary --include-inactive
+python3 arcade_query.py inventory "Atomic Arcade" --include-inactive
+```
+
+Raw SQL remains raw and does not automatically apply the active-location filter.
+
+Lazy verification is opt-in for canned queries that return location ids. It
+checks `location_verifications` first, probes only missing/stale locations, then
+reruns the query with the cache refreshed:
+
+```bash
+python3 arcade_query.py locations "Kiitos" --verify-missing
+python3 arcade_query.py where Godzilla --state UT --verify-stale-days 30
+python3 arcade_query.py nearby --lat 40.7608 --lon -111.891 --miles 10 --verify-missing --verify-limit 5
+```
+
+Keep `--verify-limit` modest when using public Nominatim. Verification evidence
+does not automatically mark a place closed/replaced unless curated into
+`location_statuses`.
+
+## Importing Pinball Map CSV Data
+
+`import_pinballmap_locations.py` defaults to dry-run mode. Always inspect the
+plan before applying.
+
+```bash
+python3 import_pinballmap_locations.py location_2026-07-05_15h22m53.csv --db aurcade_locations.sqlite --verbose
+```
+
+Apply only after making a backup and when no scraper/import process is writing:
+
+```bash
+sqlite3 aurcade_locations.sqlite ".backup 'aurcade_locations.backup.sqlite'"
+python3 import_pinballmap_locations.py location_2026-07-05_15h22m53.csv --db aurcade_locations.sqlite --apply
+```
+
+The importer is idempotent. On the already-imported Utah CSV it should report:
+
+- 71 CSV locations
+- 329 CSV location-machine placements
+- 5 locations matched to positive Aurcade ids
+- 66 existing Pinball Map-only locations reused
+- 161 machines matched to positive Aurcade game ids
+- 15 existing Pinball Map-only games reused
+- 0 placements skipped
+
+Known manual location override:
+
+- Pinball Map `10933` Nickel Mania, West Jordan -> Aurcade `695`. The source
+  addresses differ, but the user confirmed these are the same location.
+
+## Scraping Aurcade
+
+The scraper writes to the same SQLite database. Avoid running import scripts
+while the scraper is active.
+
+Useful scraper examples:
+
+```bash
+python3 scrape_aurcade_locations.py --db aurcade_locations.sqlite --include-games
+python3 scrape_aurcade_locations.py --db aurcade_locations.sqlite --index-only
+```
+
+Check active/completed scrape runs with:
+
+```bash
+sqlite3 aurcade_locations.sqlite "SELECT * FROM scrape_runs ORDER BY id DESC LIMIT 3;"
+```
+
+## Verification
+
+Run these after code or database changes:
+
+```bash
+python3 -m unittest discover -s tests
+python3 -m py_compile arcade_query.py import_pinballmap_locations.py scrape_aurcade_locations.py
+sqlite3 aurcade_locations.sqlite "PRAGMA integrity_check; PRAGMA foreign_key_check;"
+python3 arcade_query.py summary
+```
+
+Expected current summary after the Utah Pinball Map import, ZIv Utah import,
+and closed-location status curation:
+
+- `locations`: 2210
+- `active_locations`: 2205
+- `locations_ut`: 90
+- `active_locations_ut`: 85
+- `pinballmap_only_locations`: 66
+- `ziv_only_locations`: 10
+- `games`: 3409
+- `pinballmap_only_games`: 15
+- `ziv_only_games`: 121
+- `location_games`: 38935
+- `active_location_games`: 38798
+- `pinball_rows`: 6967
+- `active_pinball_rows`: 6962
+
+To run external OSM/Nominatim verification, use a rate-limited batch. Public
+Nominatim service should be treated gently; keep the default delay unless you
+are using a different compliant endpoint.
+
+```bash
+python3 verify_locations_osm.py --state UT --limit 25 --min-game-count 3 --apply
+python3 verify_locations_osm.py --location-id 1505 --include-inactive --apply
+```
+
+Recent Nominatim check status counts, including Atomic plus the top Utah batch:
+
+- `matched`: 13
+- `possible_replaced`: 12
+- `not_found`: 1
+
+Treat `possible_replaced` as a review queue. Many results are malls, suites,
+street labels, or nearby POIs where OSM found the address but not the exact
+arcade name.
+
+For Utah pinball locations, Pinball Map community/admin data is high-trust. The
+user is an administrator for Utah Pinball Map records; recent Pinball Map API
+updates, `ic_active`, and user submission history should generally outweigh
+Nominatim reverse-geocode mismatches.
+
+Zenius -I- vanisher (ZIv) is useful for non-pinball arcade, rhythm, Japanese,
+motion, and amusement-game coverage that Pinball Map misses. It is not a
+general business-status authority, and a ZIv miss is not closure evidence.
+
+Use the ZIv validator like this:
+
+```bash
+python3 validate_ziv_locations.py --limit 40
+sqlite3 aurcade_locations.sqlite ".backup 'aurcade_locations.backup.sqlite'"
+python3 validate_ziv_locations.py --apply --limit 40
+```
+
+The script writes only sidecar data:
+
+- `ziv_location_links`
+- `location_verifications` rows with `provider = 'ziv'`
+
+It does not alter Aurcade-native `locations`, `games`, or `location_games`, and
+it does not auto-curate `location_statuses`.
+
+Use the ZIv importer for Utah-only source additions after a dry run:
+
+```bash
+python3 import_ziv_locations.py
+sqlite3 aurcade_locations.sqlite ".backup 'aurcade_locations.backup.sqlite'"
+python3 import_ziv_locations.py --apply
+```
+
+Current ZIv import baseline:
+
+- 2 manual duplicate/alias links:
+  - ZIv `1783` Sandy Nicklecade -> local `1569`.
+  - ZIv `6007` Arcade Galactic -> local `120`.
+- 10 ZIv-only Utah locations imported.
+- 74 ZIv machine placements imported.
+- 54 ZIv-only games imported.
+
+Use the ZIv machine merger after location links/imports to bring ZIv inventory
+into existing matched Utah locations:
+
+```bash
+python3 merge_ziv_machines.py
+sqlite3 aurcade_locations.sqlite ".backup 'aurcade_locations.backup.sqlite'"
+python3 merge_ziv_machines.py --apply
+```
+
+The merger creates/updates:
+
+- `ziv_machine_links`: audit table for each ZIv machine reviewed.
+- `games`: exact ZIv titles using the ZIv negative id namespace when no
+  near-exact existing game title is found.
+- `location_games`: missing placements for existing linked locations.
+
+Current ZIv machine merge baseline:
+
+- 231 ZIv machine rows reviewed for existing linked Utah locations.
+- 158 machine placements inserted.
+- 73 machines linked as already present in local inventory.
+- 67 additional ZIv-only game rows created by the second pass.
+
+Current ZIv U.S. validation baseline:
+
+- 2,929 ZIv U.S. arcades fetched.
+- 1,968 active local U.S. locations considered.
+- 523 local/source locations linked to ZIv after Utah imports and overrides.
+- 474 high/probable matches.
+- 37 possible matches.
+- 25 Utah ZIv rows accounted for: 13 matched existing local rows, 2 linked by
+  manual duplicate/alias override, and 10 imported as ZIv-only locations.
+
+Pinball Map validation is intentionally source-scoped: it is strong evidence for
+locations with pinball machines, but it will miss arcades or amusement venues
+that do not have pins. Absence from Pinball Map is not closure evidence by
+itself.
+
+Run Pinball Map validation with:
+
+```bash
+python3 validate_pinballmap_locations.py --state UT --limit 100 --apply
+```
+
+Recent Pinball Map validation results:
+
+- Known Pinball Map links: 71
+- `fresh_pinballmap`: 70
+- `pinballmap_not_found`: 1
+
+## Cautions
+
+- Use read-only access for analysis unless the user explicitly asks to mutate
+  the database.
+- Make a SQLite `.backup` before imports or schema changes.
+- Do not use raw file copy as the only backup while WAL files may exist.
+- Be careful with fuzzy matches. City is a meaningful location-match gate; an
+  address plus ZIP match may override city-name drift.
+- Pinball Map CSV contains superfluous and sensitive export fields. The importer
+  intentionally ignores user emails, IPs, tokens, and similar fields.

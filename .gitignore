@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.env
+.venv/
+venv/
+*.backup*.sqlite
+*.baseline*.sqlite
+backups/
+*.db-journal
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+rare_games_*.md
+rare_pinball_games_*.md
+.DS_Store
