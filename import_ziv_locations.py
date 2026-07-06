@@ -29,6 +29,7 @@ from validate_ziv_locations import (
     fetch_ziv_us_arcades,
     load_local_locations,
 )
+from us_states import add_state_selection_args, selected_states
 
 
 DEFAULT_DB = Path("aurcade_locations.sqlite")
@@ -138,6 +139,7 @@ def build_plan(
     fetch_machines: bool,
     delay_seconds: float,
 ) -> ImportPlan:
+    state = state.upper()
     ziv_arcades = [ziv for ziv in fetch_ziv_us_arcades(cache, cache_hours) if ziv.state == state]
     locals_ = [local for local in load_local_locations(conn, include_inactive=True) if local.state == state]
     matches = best_matches(ziv_arcades, locals_)
@@ -347,8 +349,8 @@ def insert_locations(conn: sqlite3.Connection, plan: ImportPlan, checked_at: str
     )
 
 
-def print_plan(plan: ImportPlan) -> None:
-    print("# ZIv Utah Import Plan")
+def print_plan(plan: ImportPlan, state: str) -> None:
+    print(f"# ZIv {state} Import Plan")
     print()
     print(f"- Manual override links to upsert: {len(plan.override_links)}")
     print(f"- New ZIv-only locations to insert: {len(plan.locations_to_insert)}")
@@ -377,7 +379,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--cache", type=Path, default=DEFAULT_CACHE)
     parser.add_argument("--cache-hours", type=float, default=24.0)
-    parser.add_argument("--state", default="UT")
+    add_state_selection_args(parser, default_state="UT")
     parser.add_argument("--locations-only", action="store_true")
     parser.add_argument("--delay-seconds", type=float, default=0.25)
     parser.add_argument("--apply", action="store_true")
@@ -390,21 +392,23 @@ def main() -> int:
     conn = connect(args.db)
     try:
         ensure_schema(conn)
-        plan = build_plan(
-            conn,
-            args.state,
-            args.cache,
-            args.cache_hours,
-            fetch_machines=not args.locations_only,
-            delay_seconds=args.delay_seconds,
-        )
-        print_plan(plan)
-        if args.apply:
-            upsert_override_links(conn, plan, checked_at)
-            insert_locations(conn, plan, checked_at)
-            conn.commit()
+        for state in selected_states(args):
+            plan = build_plan(
+                conn,
+                state,
+                args.cache,
+                args.cache_hours,
+                fetch_machines=not args.locations_only,
+                delay_seconds=args.delay_seconds,
+            )
+            print_plan(plan, state)
+            if args.apply:
+                upsert_override_links(conn, plan, checked_at)
+                insert_locations(conn, plan, checked_at)
+                conn.commit()
+                print()
+                print(f"Applied {state}.")
             print()
-            print("Applied.")
     finally:
         conn.close()
     return 0

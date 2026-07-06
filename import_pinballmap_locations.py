@@ -408,6 +408,16 @@ def best_location_match(
     existing_locations: Iterable[ExistingLocation],
     threshold: float,
 ) -> Optional[LocationMatch]:
+    best = best_location_candidate(pinballmap_location, existing_locations)
+    if best and best.confidence >= threshold:
+        return best
+    return None
+
+
+def best_location_candidate(
+    pinballmap_location: PinballMapLocation,
+    existing_locations: Iterable[ExistingLocation],
+) -> Optional[LocationMatch]:
     best: Optional[LocationMatch] = None
     for existing_location in existing_locations:
         if pinballmap_location.state and existing_location.state:
@@ -421,9 +431,7 @@ def best_location_match(
                 confidence=confidence,
                 method="fuzzy_name_address",
             )
-    if best and best.confidence >= threshold:
-        return best
-    return None
+    return best
 
 
 def game_match_score(machine: PinballMapMachine, existing_game: ExistingGame) -> float:
@@ -594,6 +602,24 @@ def upsert_location_game(
     )
 
 
+def ensure_pinballmap_link_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS pinballmap_location_links (
+            location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
+            pinballmap_location_id INTEGER NOT NULL,
+            confidence REAL NOT NULL,
+            method TEXT NOT NULL,
+            linked_at TEXT NOT NULL,
+            PRIMARY KEY (location_id, pinballmap_location_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_pinballmap_location_links_pinballmap
+            ON pinballmap_location_links(pinballmap_location_id);
+        """
+    )
+
+
 def connect(path: Path, readonly: bool) -> sqlite3.Connection:
     if readonly:
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
@@ -615,6 +641,7 @@ def import_bundle(
     location_match_threshold: float,
     game_match_threshold: float,
     verbose: bool,
+    ambiguous_location_threshold: Optional[float] = None,
 ) -> ImportStats:
     stats = ImportStats()
     fetched_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -649,6 +676,12 @@ def import_bundle(
             location_ids[location.pinballmap_location_id] = match.location_id
             stats.locations_matched += 1
             continue
+
+        if ambiguous_location_threshold is not None:
+            candidate = best_location_candidate(location, positive_existing_locations)
+            if candidate and candidate.confidence >= ambiguous_location_threshold:
+                stats.locations_skipped += 1
+                continue
 
         derived_location_id = source_key_to_db_id(location.pinballmap_location_id)
         if derived_location_id in existing_location_ids:
@@ -701,6 +734,7 @@ def import_bundle(
         return stats
 
     with conn:
+        ensure_pinballmap_link_schema(conn)
         conn.execute("INSERT OR IGNORE INTO location_types(type) VALUES (?)", ("Pinball Map",))
         for location in bundle.locations:
             location_id = location_ids.get(location.pinballmap_location_id)
@@ -731,6 +765,32 @@ def import_bundle(
                 bundle.machines[placement.pinballmap_machine_id],
                 fetched_at,
             )
+        link_rows = []
+        for pinballmap_location_id, location_id in sorted(location_ids.items()):
+            match = location_matches.get(pinballmap_location_id)
+            if match:
+                confidence = match.confidence
+                method = f"import_{match.method}"
+            elif location_id < 0:
+                confidence = 1.0
+                method = "pinballmap_only_import"
+            else:
+                confidence = 1.0
+                method = "pinballmap_reused"
+            link_rows.append((location_id, pinballmap_location_id, confidence, method, fetched_at))
+        conn.executemany(
+            """
+            INSERT INTO pinballmap_location_links (
+                location_id, pinballmap_location_id, confidence, method, linked_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(location_id, pinballmap_location_id) DO UPDATE SET
+                confidence = excluded.confidence,
+                method = excluded.method,
+                linked_at = excluded.linked_at
+            """,
+            link_rows,
+        )
 
     return stats
 
@@ -806,7 +866,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Transform a Pinball Map location CSV into the Aurcade SQLite schema."
     )
-    parser.add_argument("csv_path", type=Path, help="Pinball Map CSV export path")
+    parser.add_argument("csv_paths", nargs="+", type=Path, help="One or more Pinball Map CSV export paths")
     parser.add_argument(
         "--db",
         type=Path,
@@ -850,16 +910,19 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    bundle = read_pinballmap_csv(args.csv_path)
     conn = connect(args.db, readonly=not args.apply)
     try:
-        import_bundle(
-            conn,
-            bundle,
-            apply=args.apply,
-            insert_unmatched_locations=not args.matched_locations_only,
-            insert_unmatched_games=not args.matched_games_only,
-            location_match_threshold=args.location_match_threshold,
+        for csv_path in args.csv_paths:
+            if len(args.csv_paths) > 1:
+                print(f"\n# {csv_path}")
+            bundle = read_pinballmap_csv(csv_path)
+            import_bundle(
+                conn,
+                bundle,
+                apply=args.apply,
+                insert_unmatched_locations=not args.matched_locations_only,
+                insert_unmatched_games=not args.matched_games_only,
+                location_match_threshold=args.location_match_threshold,
             game_match_threshold=args.game_match_threshold,
             verbose=args.verbose,
         )

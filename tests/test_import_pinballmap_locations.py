@@ -397,6 +397,96 @@ class PinballMapImportTests(unittest.TestCase):
         self.assertEqual(game_count, 105)
         self.assertEqual(fetched_at, "aurcade-fetch")
 
+    def test_import_bundle_skips_ambiguous_location_inserts(self):
+        conn = sqlite3.connect(":memory:")
+        conn.executescript(
+            """
+            CREATE TABLE location_types (type TEXT PRIMARY KEY);
+            CREATE TABLE locations (
+                location_id INTEGER PRIMARY KEY,
+                name TEXT,
+                type TEXT,
+                city TEXT,
+                state TEXT,
+                street_address TEXT,
+                postal_code TEXT,
+                phone TEXT,
+                address_text TEXT,
+                website_url TEXT,
+                is_public INTEGER,
+                game_count INTEGER,
+                unique_game_count INTEGER,
+                world_record_count INTEGER,
+                updated_text TEXT,
+                description TEXT,
+                latitude REAL,
+                longitude REAL,
+                detail_fetched_at TEXT,
+                source_url TEXT
+            );
+            CREATE TABLE games (
+                game_id INTEGER PRIMARY KEY,
+                name TEXT,
+                manufacturer TEXT
+            );
+            CREATE TABLE location_games (
+                location_id INTEGER,
+                game_id INTEGER,
+                cabinet_type TEXT,
+                year INTEGER,
+                players INTEGER,
+                controls_condition INTEGER,
+                screen_condition INTEGER,
+                cabinet_condition INTEGER,
+                fetched_at TEXT,
+                PRIMARY KEY (location_id, game_id)
+            );
+            INSERT INTO locations(location_id, name, city, state, street_address, postal_code, source_url)
+            VALUES (10, 'Quarters Arcade Bar', 'Salt Lake City', 'UT', '5 E 400 S', '84111', 'aurcade');
+            """
+        )
+        bundle = ImportBundle(
+            locations=[
+                PinballMapLocation(
+                    pinballmap_location_id=123,
+                    name="Quarters Arcade",
+                    street_address="99 W Different St",
+                    city="Salt Lake City",
+                    state="UT",
+                    postal_code="84111",
+                    phone=None,
+                    website_url=None,
+                    description=None,
+                    latitude=None,
+                    longitude=None,
+                    location_type="Arcade",
+                    machine_count=0,
+                    updated_text=None,
+                )
+            ],
+            machines={},
+            placements=[],
+        )
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            stats = import_bundle(
+                conn,
+                bundle,
+                apply=True,
+                insert_unmatched_locations=True,
+                insert_unmatched_games=True,
+                location_match_threshold=0.95,
+                game_match_threshold=0.86,
+                verbose=False,
+                ambiguous_location_threshold=0.65,
+            )
+
+        self.assertEqual(stats.locations_skipped, 1)
+        self.assertEqual(
+            conn.execute("SELECT COUNT(*) FROM locations WHERE location_id < 0").fetchone()[0],
+            0,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

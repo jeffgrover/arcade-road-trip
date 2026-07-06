@@ -22,6 +22,7 @@ from typing import Optional
 from import_pinballmap_locations import ExistingGame, game_similarity
 from import_ziv_locations import DEFAULT_CACHE, DEFAULT_DB, ZivDetail, fetch_ziv_detail, ziv_db_id
 from validate_ziv_locations import ZivArcade, connect, ensure_schema, fetch_ziv_us_arcades
+from us_states import add_state_selection_args, selected_states
 
 
 LOCAL_DUPLICATE_THRESHOLD = 0.96
@@ -124,26 +125,29 @@ def load_location_inventory(conn: sqlite3.Connection, location_id: int) -> list[
     ]
 
 
-def load_utah_ziv_links(conn: sqlite3.Connection, include_ziv_only: bool) -> list[sqlite3.Row]:
+def load_ziv_links(conn: sqlite3.Connection, states: list[str], include_ziv_only: bool) -> list[sqlite3.Row]:
     ziv_only_filter = "" if include_ziv_only else "AND l.location_id NOT BETWEEN -2999999999 AND -2000000000"
+    placeholders = ",".join("?" for _ in states)
     return list(
         conn.execute(
             f"""
-            SELECT l.location_id, l.name, l.city, z.ziv_location_id, z.method
+            SELECT l.location_id, l.name, l.city, l.state, z.ziv_location_id, z.method
             FROM ziv_location_links z
             JOIN locations l ON l.location_id = z.location_id
             LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
-            WHERE l.state = 'UT'
+            WHERE l.state IN ({placeholders})
               AND COALESCE(ls.status, 'active') NOT IN ('closed', 'replaced')
               {ziv_only_filter}
-            ORDER BY l.city, l.name, z.ziv_location_id
-            """
+            ORDER BY l.state, l.city, l.name, z.ziv_location_id
+            """,
+            states,
         )
     )
 
 
-def find_ziv_arcades(cache: Path, cache_hours: float) -> dict[int, ZivArcade]:
-    return {ziv.ziv_id: ziv for ziv in fetch_ziv_us_arcades(cache, cache_hours) if ziv.state == "UT"}
+def find_ziv_arcades(cache: Path, cache_hours: float, states: list[str]) -> dict[int, ZivArcade]:
+    state_set = set(states)
+    return {ziv.ziv_id: ziv for ziv in fetch_ziv_us_arcades(cache, cache_hours) if ziv.state in state_set}
 
 
 def best_local_duplicate(machine_name: str, inventory: list[ExistingLocationGame]) -> tuple[Optional[ExistingLocationGame], float]:
@@ -228,11 +232,12 @@ def build_plan(
     conn: sqlite3.Connection,
     cache: Path,
     cache_hours: float,
+    states: list[str],
     include_ziv_only: bool,
     delay_seconds: float,
 ) -> list[MachineDecision]:
-    links = load_utah_ziv_links(conn, include_ziv_only)
-    ziv_by_id = find_ziv_arcades(cache, cache_hours)
+    links = load_ziv_links(conn, states, include_ziv_only)
+    ziv_by_id = find_ziv_arcades(cache, cache_hours, states)
     games = load_existing_games(conn)
     decisions: list[MachineDecision] = []
 
@@ -385,11 +390,11 @@ def apply_plan(conn: sqlite3.Connection, decisions: list[MachineDecision], check
         )
 
 
-def print_plan(decisions: list[MachineDecision], limit: int) -> None:
+def print_plan(decisions: list[MachineDecision], states: list[str], limit: int) -> None:
     inserts = [decision for decision in decisions if decision.insert_location_game]
     skips = [decision for decision in decisions if not decision.insert_location_game]
     new_games = [decision for decision in decisions if decision.insert_game]
-    print("# ZIv Machine Merge Plan")
+    print(f"# ZIv Machine Merge Plan: {', '.join(states)}")
     print()
     print(f"- ZIv machine rows reviewed: {len(decisions)}")
     print(f"- Machine placements to insert: {len(inserts)}")
@@ -416,10 +421,11 @@ def print_plan(decisions: list[MachineDecision], limit: int) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Merge ZIv machine inventories into linked Utah locations.")
+    parser = argparse.ArgumentParser(description="Merge ZIv machine inventories into linked local locations.")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--cache", type=Path, default=DEFAULT_CACHE)
     parser.add_argument("--cache-hours", type=float, default=24.0)
+    add_state_selection_args(parser, default_state="UT")
     parser.add_argument("--include-ziv-only", action="store_true")
     parser.add_argument("--delay-seconds", type=float, default=0.25)
     parser.add_argument("--limit", type=int, default=80)
@@ -433,14 +439,16 @@ def main() -> int:
     conn = connect(args.db)
     try:
         ensure_machine_schema(conn)
+        states = selected_states(args)
         decisions = build_plan(
             conn,
             args.cache,
             args.cache_hours,
+            states,
             args.include_ziv_only,
             args.delay_seconds,
         )
-        print_plan(decisions, args.limit)
+        print_plan(decisions, states, args.limit)
         if args.apply:
             apply_plan(conn, decisions, checked_at)
             conn.commit()

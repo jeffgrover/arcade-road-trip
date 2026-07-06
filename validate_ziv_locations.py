@@ -561,8 +561,9 @@ def main() -> int:
         locals_ = load_local_locations(conn, args.include_inactive)
         matches = best_matches(ziv_arcades, locals_)
         if args.apply:
-            upsert_links(conn, matches, checked_at)
-            insert_verifications(conn, matches, checked_at)
+            high_matches = [match for match in matches if match.confidence >= 0.84]
+            upsert_links(conn, high_matches, checked_at)
+            insert_verifications(conn, high_matches, checked_at)
             conn.commit()
         print_report(ziv_arcades, locals_, matches, args.limit)
     finally:

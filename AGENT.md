@@ -9,9 +9,12 @@ This workspace contains the local Arcade Road Trip prototype plus a curated SQLi
   the Pinball Map import.
 - `scrape_aurcade_locations.py`: Aurcade scraper and original schema creator.
 - `import_pinballmap_locations.py`: Pinball Map CSV transformer/importer.
+- `import_pinballmap_api.py`: public Pinball Map API importer for national,
+  cached, rate-limited region pulls.
 - `import_ziv_locations.py`: Zenius -I- vanisher Utah location/machine importer.
 - `merge_ziv_machines.py`: second-pass ZIv machine inventory merger for
   already-linked Utah locations.
+- `curate_us_sources.py`: conservative national source-curation orchestrator.
 - `arcade_query.py`: read-only query CLI intended for Codex/LLM use.
 - `arcade_roadtrip_app.py`: local Flask route-planning prototype for Arcade Road Trip.
 - `verify_locations_osm.py`: OpenStreetMap/Nominatim verification probe that
@@ -142,8 +145,9 @@ does not automatically mark a place closed/replaced unless curated into
 
 ## Importing Pinball Map CSV Data
 
-`import_pinballmap_locations.py` defaults to dry-run mode. Always inspect the
-plan before applying.
+`import_pinballmap_locations.py` is for privileged/admin CSV exports, such as
+the Utah export available to the user. It is NOT the national Pinball Map path.
+The script defaults to dry-run mode. Always inspect the plan before applying.
 
 ```bash
 python3 import_pinballmap_locations.py location_2026-07-05_15h22m53.csv --db aurcade_locations.sqlite --verbose
@@ -170,6 +174,63 @@ Known manual location override:
 
 - Pinball Map `10933` Nickel Mania, West Jordan -> Aurcade `695`. The source
   addresses differ, but the user confirmed these are the same location.
+
+## Importing Pinball Map Public API Data
+
+For national Pinball Map data, use measured public API calls through
+`import_pinballmap_api.py`. It fetches `/api/v1/regions.json`,
+`/api/v1/location_types.json`, and selected
+`/api/v1/region/<region>/locations.json` payloads, caches responses under
+`cache/pinballmap_api/`, and converts them into the same internal import bundle
+as the CSV importer.
+
+Examples:
+
+```bash
+python3 import_pinballmap_api.py --state CO
+python3 import_pinballmap_api.py --states CO,NV,AZ
+python3 import_pinballmap_api.py --all-continental-us
+```
+
+Use `--delay-seconds` to keep region fetches gentle. Dry-run is the default;
+use `--apply` only after reviewing the plan and making a backup. The API path
+uses an ambiguity guard: if a Pinball Map location nearly matches an existing
+local location but not confidently enough, it is skipped for review instead of
+being inserted as a likely duplicate.
+
+Attribution and rate caution: Pinball Map asks API users to include attribution
+and warns that thousands of requests in a short time may get blocked. Prefer
+cached region pulls over repeated live probes.
+
+## National Source Curation
+
+Use `curate_us_sources.py` to coordinate the conservative U.S. enrichment pass.
+It is dry-run by default and writes review artifacts under `reports/`:
+
+```bash
+python3 curate_us_sources.py --state CO
+python3 curate_us_sources.py --states CO,NV,AZ
+python3 curate_us_sources.py --all-continental-us
+```
+
+Apply mode creates a SQLite `.backup` first unless `--skip-backup` is passed:
+
+```bash
+python3 curate_us_sources.py --all-continental-us --apply
+```
+
+The orchestrator:
+
+- links only high-confidence ZIv matches (`confidence >= 0.84`);
+- leaves ZIv possible matches in `reports/ziv_possible_matches_<date>.md`;
+- imports clear unmatched ZIv rows as ZIv-only locations;
+- merges ZIv machines into linked/imported locations;
+- imports Pinball Map API locations/machines with the ambiguity guard;
+- writes `pinballmap_possible_matches`, `ziv_unmatched_source_locations`, and
+  `national_data_quality` reports.
+
+Google Places/business-status validation remains a later layer; source absence
+from Pinball Map or ZIv is not closure evidence.
 
 ## Scraping Aurcade
 
@@ -269,6 +330,14 @@ sqlite3 aurcade_locations.sqlite ".backup 'aurcade_locations.backup.sqlite'"
 python3 import_ziv_locations.py --apply
 ```
 
+The ZIv importer also supports national state selection:
+
+```bash
+python3 import_ziv_locations.py --state CO
+python3 import_ziv_locations.py --states CO,NV,AZ
+python3 import_ziv_locations.py --all-continental-us
+```
+
 Current ZIv import baseline:
 
 - 2 manual duplicate/alias links:
@@ -279,12 +348,19 @@ Current ZIv import baseline:
 - 54 ZIv-only games imported.
 
 Use the ZIv machine merger after location links/imports to bring ZIv inventory
-into existing matched Utah locations:
+into existing matched locations:
 
 ```bash
 python3 merge_ziv_machines.py
 sqlite3 aurcade_locations.sqlite ".backup 'aurcade_locations.backup.sqlite'"
 python3 merge_ziv_machines.py --apply
+```
+
+The merger supports the same state selectors:
+
+```bash
+python3 merge_ziv_machines.py --state CO
+python3 merge_ziv_machines.py --all-continental-us --include-ziv-only
 ```
 
 The merger creates/updates:

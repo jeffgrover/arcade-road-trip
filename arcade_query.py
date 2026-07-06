@@ -775,6 +775,112 @@ def verification_report(conn: sqlite3.Connection, state: Optional[str], limit: i
     return run_query(conn, sql, params, title="Location Verification Report")
 
 
+def source_coverage(conn: sqlite3.Connection, state: Optional[str], limit: int) -> QueryResult:
+    state_clause = "WHERE l.state = ?" if state else ""
+    params: list[Any] = []
+    if state:
+        params.append(state)
+    params.append(limit)
+    sql = f"""
+    SELECT
+        l.state,
+        COUNT(DISTINCT l.location_id) AS locations,
+        COUNT(DISTINCT CASE WHEN l.location_id > 0 THEN l.location_id END) AS aurcade_locations,
+        COUNT(DISTINCT CASE WHEN l.location_id BETWEEN -1999999999 AND -1000000000 THEN l.location_id END) AS pinballmap_only_locations,
+        COUNT(DISTINCT CASE WHEN l.location_id BETWEEN -2999999999 AND -2000000000 THEN l.location_id END) AS ziv_only_locations,
+        COUNT(DISTINCT pll.location_id) AS pinballmap_linked_locations,
+        COUNT(DISTINCT zll.location_id) AS ziv_linked_locations,
+        SUM(COALESCE(l.game_count, 0)) AS listed_game_count
+    FROM locations l
+    LEFT JOIN pinballmap_location_links pll ON pll.location_id = l.location_id
+    LEFT JOIN ziv_location_links zll ON zll.location_id = l.location_id
+    {state_clause}
+    GROUP BY l.state
+    ORDER BY locations DESC, l.state
+    LIMIT ?
+    """
+    return run_query(conn, sql, params, title="Source Coverage")
+
+
+def duplicate_leads(conn: sqlite3.Connection, state: Optional[str], limit: int) -> QueryResult:
+    state_clause = "AND a.state = ?" if state else ""
+    params: list[Any] = []
+    if state:
+        params.append(state)
+    params.append(limit)
+    sql = f"""
+    SELECT
+        a.state,
+        a.city,
+        a.location_id AS left_id,
+        a.name AS left_name,
+        a.street_address AS left_address,
+        b.location_id AS right_id,
+        b.name AS right_name,
+        b.street_address AS right_address
+    FROM locations a
+    JOIN locations b ON b.location_id > a.location_id
+        AND COALESCE(a.state, '') = COALESCE(b.state, '')
+        AND COALESCE(a.city, '') = COALESCE(b.city, '')
+        AND (
+            lower(a.name) = lower(b.name)
+            OR (
+                a.street_address IS NOT NULL
+                AND b.street_address IS NOT NULL
+                AND lower(a.street_address) = lower(b.street_address)
+            )
+        )
+    WHERE COALESCE(a.state, '') != ''
+      {state_clause}
+    ORDER BY a.state, a.city, a.name
+    LIMIT ?
+    """
+    return run_query(conn, sql, params, title="Possible Duplicate Locations")
+
+
+def review_queue(conn: sqlite3.Connection, state: Optional[str], limit: int) -> QueryResult:
+    state_clause = "AND l.state = ?" if state else ""
+    params: list[Any] = []
+    if state:
+        params.append(state)
+    params.append(limit)
+    sql = f"""
+    WITH latest AS (
+        SELECT
+            lv.*,
+            ROW_NUMBER() OVER (
+                PARTITION BY lv.location_id, lv.provider
+                ORDER BY lv.checked_at DESC, lv.verification_id DESC
+            ) AS rn
+        FROM location_verifications lv
+    )
+    SELECT
+        l.location_id,
+        l.name,
+        l.city,
+        l.state,
+        l.game_count,
+        COALESCE(ls.status, 'active') AS status,
+        MAX(latest.checked_at) AS last_checked_at,
+        GROUP_CONCAT(DISTINCT latest.provider) AS verification_sources
+    FROM locations l
+    LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
+    LEFT JOIN latest ON latest.location_id = l.location_id AND latest.rn = 1
+    WHERE COALESCE(ls.status, 'active') NOT IN ('closed', 'replaced')
+      {state_clause}
+    GROUP BY l.location_id
+    HAVING last_checked_at IS NULL OR COALESCE(l.game_count, 0) >= 25
+    ORDER BY
+        CASE WHEN last_checked_at IS NULL THEN 0 ELSE 1 END,
+        COALESCE(l.game_count, 0) DESC,
+        l.state,
+        l.city,
+        l.name
+    LIMIT ?
+    """
+    return run_query(conn, sql, params, title="Review Queue")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Query the local arcade SQLite database.")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="SQLite database path.")
@@ -864,6 +970,18 @@ def build_parser() -> argparse.ArgumentParser:
     verification_parser.add_argument("--state", default="UT")
     verification_parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
 
+    coverage_parser = subparsers.add_parser("source-coverage", help="Summarize source provenance by state.")
+    coverage_parser.add_argument("--state")
+    coverage_parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+
+    duplicate_parser = subparsers.add_parser("duplicate-leads", help="List likely duplicate locations.")
+    duplicate_parser.add_argument("--state")
+    duplicate_parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+
+    review_parser = subparsers.add_parser("review-queue", help="List locations needing source/status review.")
+    review_parser.add_argument("--state")
+    review_parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+
     return parser
 
 
@@ -921,6 +1039,12 @@ def dispatch(conn: sqlite3.Connection, args: argparse.Namespace) -> QueryResult:
         return inactive_locations(conn, args.state, args.limit)
     if args.command == "verification-report":
         return verification_report(conn, args.state, args.limit)
+    if args.command == "source-coverage":
+        return source_coverage(conn, args.state, args.limit)
+    if args.command == "duplicate-leads":
+        return duplicate_leads(conn, args.state, args.limit)
+    if args.command == "review-queue":
+        return review_queue(conn, args.state, args.limit)
     raise ValueError(f"Unknown command: {args.command}")
 
 
