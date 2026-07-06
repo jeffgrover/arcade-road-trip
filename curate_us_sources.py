@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import shutil
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -54,6 +53,27 @@ from validate_ziv_locations import (
 DEFAULT_DB = Path("aurcade_locations.sqlite")
 DEFAULT_REPORT_DIR = Path("reports")
 PINBALLMAP_AMBIGUOUS_THRESHOLD = 0.65
+
+
+class Progress:
+    def __init__(self, log_file: Path | None = None) -> None:
+        self.log_file = log_file
+        self._handle = None
+        if log_file:
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            self._handle = log_file.open("a")
+
+    def close(self) -> None:
+        if self._handle:
+            self._handle.close()
+            self._handle = None
+
+    def __call__(self, message: str) -> None:
+        line = f"[{datetime.now().isoformat(timespec='seconds')}] {message}"
+        print(line, flush=True)
+        if self._handle:
+            self._handle.write(line + "\n")
+            self._handle.flush()
 
 
 @dataclass(frozen=True)
@@ -258,6 +278,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cache-hours", type=float, default=24 * 7)
     parser.add_argument("--delay-seconds", type=float, default=1.0)
     parser.add_argument("--locations-only", action="store_true")
+    parser.add_argument(
+        "--log-file",
+        type=Path,
+        help="Optional file to tee progress output to. Console progress is always printed.",
+    )
     return parser
 
 
@@ -265,105 +290,157 @@ def main() -> int:
     args = build_parser().parse_args()
     states = selected_states(args)
     checked_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    progress = Progress(args.log_file)
     backup_path = None
-    if args.apply and not args.skip_backup:
-        backup_path = backup_database(args.db)
-
-    conn = connect(args.db)
-    pinballmap_bundle = None
-    report_paths: list[Path] = []
     try:
-        ensure_schema(conn)
-        ensure_machine_schema(conn)
-        ziv_matches: list[Match] = []
-        if not args.skip_ziv:
-            all_ziv = [ziv for ziv in fetch_ziv_us_arcades(args.ziv_cache, args.cache_hours) if ziv.state in states]
-            locals_ = [local for local in load_local_locations(conn, include_inactive=False) if local.state in states]
-            ziv_matches = best_matches(all_ziv, locals_)
-            high_matches = [match for match in ziv_matches if match.confidence >= 0.84]
-            if args.apply:
-                upsert_links(conn, high_matches, checked_at)
-                insert_verifications(conn, high_matches, checked_at)
-                conn.commit()
-            report_paths.append(write_ziv_possible_report(args.report_dir, ziv_matches))
-            report_paths.append(write_ziv_unmatched_report(args.report_dir, all_ziv, ziv_matches))
+        progress(f"starting national source curation mode={'apply' if args.apply else 'dry-run'} states={','.join(states)}")
+        if args.apply and not args.skip_backup:
+            progress(f"creating SQLite backup for {args.db}")
+            backup_path = backup_database(args.db)
+            progress(f"backup created: {backup_path}")
 
-            for state in states:
-                import_plan = build_ziv_import_plan(
+        conn = connect(args.db)
+        pinballmap_bundle = None
+        report_paths: list[Path] = []
+        try:
+            progress("ensuring sidecar schemas")
+            ensure_schema(conn)
+            ensure_machine_schema(conn)
+            ziv_matches: list[Match] = []
+            if args.skip_ziv:
+                progress("skipping ZIv phase")
+            else:
+                progress("fetching ZIv U.S. arcade cache/API data")
+                all_ziv = [ziv for ziv in fetch_ziv_us_arcades(args.ziv_cache, args.cache_hours) if ziv.state in states]
+                progress(f"ZIv source locations in selected states: {len(all_ziv)}")
+                locals_ = [local for local in load_local_locations(conn, include_inactive=False) if local.state in states]
+                progress(f"local active locations in selected states: {len(locals_)}")
+                ziv_matches = best_matches(all_ziv, locals_)
+                high_matches = [match for match in ziv_matches if match.confidence >= 0.84]
+                possible_matches = [match for match in ziv_matches if match.confidence < 0.84]
+                progress(f"ZIv matches: {len(high_matches)} high/probable, {len(possible_matches)} possible")
+                if args.apply:
+                    progress(f"applying {len(high_matches)} high-confidence ZIv location links")
+                    upsert_links(conn, high_matches, checked_at)
+                    insert_verifications(conn, high_matches, checked_at)
+                    conn.commit()
+                progress("writing ZIv review reports")
+                report_paths.append(write_ziv_possible_report(args.report_dir, ziv_matches))
+                report_paths.append(write_ziv_unmatched_report(args.report_dir, all_ziv, ziv_matches))
+
+                for index, state in enumerate(states, start=1):
+                    progress(f"building ZIv import plan for {state} ({index}/{len(states)})")
+                    import_plan = build_ziv_import_plan(
+                        conn,
+                        state,
+                        args.ziv_cache,
+                        args.cache_hours,
+                        fetch_machines=not args.locations_only,
+                        delay_seconds=args.delay_seconds,
+                    )
+                    new_locations = len(import_plan.locations_to_insert)
+                    new_placements = sum(len(detail.machines) for detail in import_plan.details.values())
+                    progress(
+                        f"ZIv {state}: {new_locations} source-only locations, "
+                        f"{new_placements} machine placements planned"
+                    )
+                    if args.apply:
+                        progress(f"applying ZIv import plan for {state}")
+                        upsert_override_links(conn, import_plan, checked_at)
+                        insert_ziv_locations(conn, import_plan, checked_at)
+                        conn.commit()
+
+                progress("building ZIv machine merge plan")
+                machine_plan = build_ziv_machine_plan(
                     conn,
-                    state,
                     args.ziv_cache,
                     args.cache_hours,
-                    fetch_machines=not args.locations_only,
+                    states,
+                    include_ziv_only=True,
                     delay_seconds=args.delay_seconds,
                 )
+                machine_inserts = len([decision for decision in machine_plan if decision.insert_location_game])
+                machine_new_games = len([decision for decision in machine_plan if decision.insert_game])
+                progress(
+                    f"ZIv machine merge: {len(machine_plan)} reviewed, "
+                    f"{machine_inserts} placements, {machine_new_games} new games planned"
+                )
                 if args.apply:
-                    upsert_override_links(conn, import_plan, checked_at)
-                    insert_ziv_locations(conn, import_plan, checked_at)
+                    progress("applying ZIv machine merge")
+                    apply_ziv_machine_plan(conn, machine_plan, checked_at)
                     conn.commit()
 
-            machine_plan = build_ziv_machine_plan(
-                conn,
-                args.ziv_cache,
-                args.cache_hours,
-                states,
-                include_ziv_only=True,
-                delay_seconds=args.delay_seconds,
-            )
-            if args.apply:
-                apply_ziv_machine_plan(conn, machine_plan, checked_at)
-                conn.commit()
-
-        if not args.skip_pinballmap:
-            pm_regions = [
-                region
-                for region in fetch_regions(args.pinballmap_cache_dir, args.cache_hours)
-                if region.state in states
-            ]
-            pm_regions.sort(key=lambda region: (region.state, region.name))
-            location_types = fetch_location_types(args.pinballmap_cache_dir, args.cache_hours)
-            payloads = []
-            for index, region in enumerate(pm_regions):
-                payloads.append(fetch_region_locations(region, args.pinballmap_cache_dir, args.cache_hours))
-                if index < len(pm_regions) - 1:
-                    time.sleep(args.delay_seconds)
-            pinballmap_bundle = bundle_from_region_payloads(payloads, location_types)
-            pm_conn = connect_pinballmap(args.db, readonly=not args.apply)
-            try:
-                possibles = pinballmap_possible_matches(
-                    pm_conn,
-                    pinballmap_bundle,
-                    DEFAULT_LOCATION_MATCH_THRESHOLD,
+            if args.skip_pinballmap:
+                progress("skipping Pinball Map phase")
+            else:
+                progress("fetching Pinball Map region list")
+                pm_regions = [
+                    region
+                    for region in fetch_regions(args.pinballmap_cache_dir, args.cache_hours)
+                    if region.state in states
+                ]
+                pm_regions.sort(key=lambda region: (region.state, region.name))
+                progress(f"Pinball Map regions selected: {len(pm_regions)}")
+                location_types = fetch_location_types(args.pinballmap_cache_dir, args.cache_hours)
+                payloads = []
+                for index, region in enumerate(pm_regions, start=1):
+                    progress(
+                        f"fetching Pinball Map region {index}/{len(pm_regions)}: "
+                        f"{region.name} ({region.full_name}, {region.state})"
+                    )
+                    payloads.append(fetch_region_locations(region, args.pinballmap_cache_dir, args.cache_hours))
+                    if index < len(pm_regions):
+                        time.sleep(args.delay_seconds)
+                progress("building Pinball Map import bundle")
+                pinballmap_bundle = bundle_from_region_payloads(payloads, location_types)
+                progress(
+                    f"Pinball Map API bundle: {len(pinballmap_bundle.locations)} locations, "
+                    f"{len(pinballmap_bundle.machines)} machines, "
+                    f"{len(pinballmap_bundle.placements)} placements"
                 )
-                report_paths.append(write_pinballmap_possible_report(args.report_dir, possibles))
-                import_bundle(
-                    pm_conn,
-                    pinballmap_bundle,
-                    apply=args.apply,
-                    insert_unmatched_locations=True,
-                    insert_unmatched_games=True,
-                    location_match_threshold=DEFAULT_LOCATION_MATCH_THRESHOLD,
-                    game_match_threshold=DEFAULT_GAME_MATCH_THRESHOLD,
-                    verbose=False,
-                    ambiguous_location_threshold=PINBALLMAP_AMBIGUOUS_THRESHOLD,
-                )
-            finally:
-                pm_conn.close()
+                pm_conn = connect_pinballmap(args.db, readonly=not args.apply)
+                try:
+                    progress("finding ambiguous Pinball Map location candidates")
+                    possibles = pinballmap_possible_matches(
+                        pm_conn,
+                        pinballmap_bundle,
+                        DEFAULT_LOCATION_MATCH_THRESHOLD,
+                    )
+                    progress(f"Pinball Map possible matches for review: {len(possibles)}")
+                    report_paths.append(write_pinballmap_possible_report(args.report_dir, possibles))
+                    progress("running Pinball Map import bundle")
+                    import_bundle(
+                        pm_conn,
+                        pinballmap_bundle,
+                        apply=args.apply,
+                        insert_unmatched_locations=True,
+                        insert_unmatched_games=True,
+                        location_match_threshold=DEFAULT_LOCATION_MATCH_THRESHOLD,
+                        game_match_threshold=DEFAULT_GAME_MATCH_THRESHOLD,
+                        verbose=False,
+                        ambiguous_location_threshold=PINBALLMAP_AMBIGUOUS_THRESHOLD,
+                    )
+                finally:
+                    pm_conn.close()
 
-        report_paths.append(write_quality_report(args.report_dir, conn, states, ziv_matches, pinballmap_bundle))
+            progress("writing national data quality report")
+            report_paths.append(write_quality_report(args.report_dir, conn, states, ziv_matches, pinballmap_bundle))
+        finally:
+            conn.close()
+
+        progress("national source curation complete")
+        print("# National Source Curation")
+        print()
+        print(f"- States: {', '.join(states)}")
+        print(f"- Mode: {'apply' if args.apply else 'dry-run'}")
+        if backup_path:
+            print(f"- Backup: {backup_path}")
+        print("- Reports:")
+        for path in report_paths:
+            print(f"  - {path}")
+        return 0
     finally:
-        conn.close()
-
-    print("# National Source Curation")
-    print()
-    print(f"- States: {', '.join(states)}")
-    print(f"- Mode: {'apply' if args.apply else 'dry-run'}")
-    if backup_path:
-        print(f"- Backup: {backup_path}")
-    print("- Reports:")
-    for path in report_paths:
-        print(f"  - {path}")
-    return 0
+        progress.close()
 
 
 if __name__ == "__main__":
