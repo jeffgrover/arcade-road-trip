@@ -35,6 +35,46 @@ repo from any static web server. The generated file includes:
 The arcade dataset is baked into the HTML. Network access is still used for map
 tiles, typed geocoding, OSRM route geometry, and the DuckDB-WASM CDN.
 
+## Data Sync
+
+The operations entrypoint is `sync_arcade_data.py`. It keeps the major pipeline
+concerns separate while wrapping the current source-specific scripts:
+
+- source sync: poll/fetch upstream source changes;
+- curation: canonicalize obvious game aliases;
+- validation: check source links and review queues;
+- database: refresh the canonical DuckDB file from the legacy SQLite writer;
+- artifact build: regenerate Parquet intermediates and the one-file atlas.
+
+Preview the plan without running anything:
+
+```bash
+.venv/bin/python sync_arcade_data.py --plan-only
+```
+
+Run the full default pipeline. Source and validation writers are dry-run unless
+`--apply` is passed; the DuckDB refresh and static build still run from the
+current local data:
+
+```bash
+.venv/bin/python sync_arcade_data.py
+```
+
+Apply upstream source/validation writes and rebuild the atlas:
+
+```bash
+.venv/bin/python sync_arcade_data.py --apply
+```
+
+Useful narrowing flags:
+
+```bash
+.venv/bin/python sync_arcade_data.py --source pinballmap --state CO
+.venv/bin/python sync_arcade_data.py --source ziv --states CO,NV,AZ
+.venv/bin/python sync_arcade_data.py --all-continental-us --skip-build
+.venv/bin/python sync_arcade_data.py --include-osm-validation --osm-limit 10
+```
+
 ## Data Tooling
 
 DuckDB is now the canonical database for the static build. The generation
@@ -42,6 +82,8 @@ pipeline flows from `arcade_roadtrip.duckdb`, through narrow data builders, into
 one deployable HTML artifact:
 
 - `arcade_roadtrip.duckdb`: canonical working database for static generation.
+- `sync_arcade_data.py`: operations wrapper for source sync, validation,
+  DuckDB refresh, and static artifact generation.
 - `migrate_sqlite_to_duckdb.py`: one-way migration from the legacy SQLite
   snapshot while import/curation writers are being ported.
 - `aurcade_locations.sqlite`: legacy SQLite source snapshot retained during the
@@ -104,9 +146,10 @@ but it is not the national path.
 
 ```bash
 .venv/bin/python arcade_query.py summary
+.venv/bin/python sync_arcade_data.py --plan-only
 .venv/bin/python migrate_sqlite_to_duckdb.py --replace
 .venv/bin/python generate_static_app.py
 .venv/bin/python -m unittest discover -s tests
-.venv/bin/python -m py_compile arcade_query.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scrape_aurcade_locations.py arcade_roadtrip_app.py curate_us_sources.py us_states.py migrate_sqlite_to_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
+.venv/bin/python -m py_compile arcade_query.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scrape_aurcade_locations.py arcade_roadtrip_app.py curate_us_sources.py us_states.py sync_arcade_data.py migrate_sqlite_to_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
 sqlite3 aurcade_locations.sqlite "PRAGMA integrity_check; PRAGMA foreign_key_check;"
 ```

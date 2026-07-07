@@ -36,6 +36,8 @@ Public GitHub Pages URL:
 - `canonicalize_games.py`: conservative game-title canonicalization pass that
   writes source-specific duplicate mappings to a sidecar table.
 - `curate_us_sources.py`: conservative national source-curation orchestrator.
+- `sync_arcade_data.py`: operations wrapper that keeps source sync, curation,
+  validation, DuckDB refresh, and static artifact generation as explicit phases.
 - `arcade_query.py`: read-only query CLI intended for Codex/LLM use.
 - `arcade_roadtrip_app.py`: legacy Flask route-planning prototype/reference and
   local static server.
@@ -169,6 +171,32 @@ Earlier standalone outputs, including `static/dashboard.html`,
 `static/duckdb_planner.html`, and `static/duckdb_planner_embedded.html`, were
 transitional artifacts. Do not revive them as product surfaces; fold useful
 behavior into `generate_static_app.py` instead.
+
+## Sync Orchestration
+
+Use `sync_arcade_data.py` as the low-maintenance operations entrypoint. It is
+currently a wrapper around the proven source-specific scripts, then refreshes
+`arcade_roadtrip.duckdb` and rebuilds the static atlas. Keep its phase
+boundaries clean:
+
+- `source-sync`: upstream polling/fetching and one-way source imports.
+- `curation`: deterministic local cleanup such as game canonicalization.
+- `validation`: source confidence checks and review queues.
+- `database`: canonical DuckDB refresh/maintenance.
+- `artifact-build`: Parquet intermediates and `static/arcade_road_trip.html`.
+
+Useful commands:
+
+```bash
+python3 sync_arcade_data.py --plan-only
+python3 sync_arcade_data.py --apply
+python3 sync_arcade_data.py --source pinballmap --state CO
+python3 sync_arcade_data.py --all-continental-us --skip-build
+```
+
+Do not hide validation work inside source-sync implementations. A default sync
+may run both phases, but the concerns should remain independently testable and
+replaceable.
 
 ## Querying the Data
 
