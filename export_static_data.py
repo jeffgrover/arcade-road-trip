@@ -9,34 +9,33 @@ from __future__ import annotations
 
 import argparse
 import json
-import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+import duckdb
+
 from us_states import CONTINENTAL_US_STATES
 
 
-DEFAULT_DB = Path("aurcade_locations.sqlite")
+DEFAULT_DB = Path("arcade_roadtrip.duckdb")
 DEFAULT_OUTPUT_DIR = Path("static/data")
 ACTIVE_STATUSES = ("active", "unverified", "uncertain", "matched", "needs_review")
 
 
-def connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
-    return conn
+def connect(db_path: Path) -> duckdb.DuckDBPyConnection:
+    return duckdb.connect(str(db_path), read_only=True)
 
 
-def has_table(conn: sqlite3.Connection, table_name: str) -> bool:
+def has_table(conn: duckdb.DuckDBPyConnection, table_name: str) -> bool:
     row = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        "SELECT 1 FROM information_schema.tables WHERE lower(table_name) = lower(?)",
         (table_name,),
     ).fetchone()
     return row is not None
 
 
-def game_identity_cte(conn: sqlite3.Connection) -> str:
+def game_identity_cte(conn: duckdb.DuckDBPyConnection) -> str:
     if has_table(conn, "game_canonical_links"):
         return """
         game_identity AS (
@@ -62,11 +61,13 @@ def placeholders(values: Iterable[Any]) -> str:
     return ",".join("?" for _ in values)
 
 
-def rows(conn: sqlite3.Connection, sql: str, params: Iterable[Any]) -> list[dict[str, Any]]:
-    return [dict(row) for row in conn.execute(sql, list(params)).fetchall()]
+def rows(conn: duckdb.DuckDBPyConnection, sql: str, params: Iterable[Any]) -> list[dict[str, Any]]:
+    result = conn.execute(sql, list(params))
+    columns = [description[0] for description in result.description]
+    return [dict(zip(columns, row)) for row in result.fetchall()]
 
 
-def load_route_locations(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+def load_route_locations(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
     status_sql = placeholders(ACTIVE_STATUSES)
     state_sql = placeholders(CONTINENTAL_US_STATES)
     params = [*ACTIVE_STATUSES, *CONTINENTAL_US_STATES]
@@ -115,13 +116,23 @@ def load_route_locations(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     LEFT JOIN game_identity gi ON gi.game_id = lg.game_id
     LEFT JOIN pinballmap_location_links pll ON pll.location_id = al.location_id
     LEFT JOIN ziv_location_links zll ON zll.location_id = al.location_id
-    GROUP BY al.location_id
+    GROUP BY
+        al.location_id,
+        al.name,
+        al.city,
+        al.state,
+        al.street_address,
+        al.latitude,
+        al.longitude,
+        al.status,
+        pll.location_id,
+        zll.location_id
     HAVING COUNT(lg.game_id) > 0
     """
     return rows(conn, sql, params)
 
 
-def load_location_games(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+def load_location_games(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
     status_sql = placeholders(ACTIVE_STATUSES)
     state_sql = placeholders(CONTINENTAL_US_STATES)
     params = [

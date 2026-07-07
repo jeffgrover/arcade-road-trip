@@ -15,7 +15,7 @@ Published app:
 
 ## Primary Static App
 
-Build the one-file atlas from the curated SQLite database:
+Build the one-file atlas from the canonical DuckDB database:
 
 ```bash
 .venv/bin/pip install -r requirements.txt
@@ -37,11 +37,15 @@ tiles, typed geocoding, OSRM route geometry, and the DuckDB-WASM CDN.
 
 ## Data Tooling
 
-The SQLite database remains the curation source of truth. The generation
-pipeline flows from SQLite, through narrow data builders, into one deployable
-HTML artifact:
+DuckDB is now the canonical database for the static build. The generation
+pipeline flows from `arcade_roadtrip.duckdb`, through narrow data builders, into
+one deployable HTML artifact:
 
-- `aurcade_locations.sqlite`: curated working database.
+- `arcade_roadtrip.duckdb`: canonical working database for static generation.
+- `migrate_sqlite_to_duckdb.py`: one-way migration from the legacy SQLite
+  snapshot while import/curation writers are being ported.
+- `aurcade_locations.sqlite`: legacy SQLite source snapshot retained during the
+  migration.
 - `arcade_query.py`: read-only CLI for analysis.
 - `curate_us_sources.py`: national source-enrichment orchestrator.
 - `export_static_data.py`: shared Parquet snapshot builders used by the atlas.
@@ -84,7 +88,9 @@ default and writes review reports under `reports/`:
 .venv/bin/python curate_us_sources.py --all-continental-us
 ```
 
-Apply mode makes a SQLite backup unless `--skip-backup` is passed:
+These source-enrichment scripts are still SQLite-era writers and are the next
+porting target. Apply mode makes a SQLite backup unless `--skip-backup` is
+passed:
 
 ```bash
 .venv/bin/python curate_us_sources.py --all-continental-us --apply
@@ -98,7 +104,9 @@ but it is not the national path.
 
 ```bash
 .venv/bin/python arcade_query.py summary
+.venv/bin/python migrate_sqlite_to_duckdb.py --replace
+.venv/bin/python generate_static_app.py
 .venv/bin/python -m unittest discover -s tests
-.venv/bin/python -m py_compile arcade_query.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scrape_aurcade_locations.py arcade_roadtrip_app.py curate_us_sources.py us_states.py generate_static_app.py export_static_data.py generate_dashboard.py
+.venv/bin/python -m py_compile arcade_query.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scrape_aurcade_locations.py arcade_roadtrip_app.py curate_us_sources.py us_states.py migrate_sqlite_to_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
 sqlite3 aurcade_locations.sqlite "PRAGMA integrity_check; PRAGMA foreign_key_check;"
 ```

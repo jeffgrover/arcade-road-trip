@@ -10,15 +10,16 @@ from __future__ import annotations
 import argparse
 import html
 import json
-import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
+
+import duckdb
 
 from us_states import CONTINENTAL_US_STATES, US_STATES
 
 
-DEFAULT_DB = Path("aurcade_locations.sqlite")
+DEFAULT_DB = Path("arcade_roadtrip.duckdb")
 DEFAULT_OUTPUT = Path("static/dashboard.html")
 ACTIVE_STATUSES = ("active", "unverified", "uncertain", "matched", "needs_review")
 MIN_LAT = 24.396308
@@ -27,21 +28,19 @@ MIN_LON = -124.848974
 MAX_LON = -66.885444
 
 
-def connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
-    return conn
+def connect(db_path: Path) -> duckdb.DuckDBPyConnection:
+    return duckdb.connect(str(db_path), read_only=True)
 
 
-def has_table(conn: sqlite3.Connection, table_name: str) -> bool:
+def has_table(conn: duckdb.DuckDBPyConnection, table_name: str) -> bool:
     row = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        "SELECT 1 FROM information_schema.tables WHERE lower(table_name) = lower(?)",
         (table_name,),
     ).fetchone()
     return row is not None
 
 
-def game_identity_cte(conn: sqlite3.Connection) -> str:
+def game_identity_cte(conn: duckdb.DuckDBPyConnection) -> str:
     if has_table(conn, "game_canonical_links"):
         return """
         game_identity AS (
@@ -68,7 +67,13 @@ def state_clause() -> str:
     return ",".join("?" for _ in CONTINENTAL_US_STATES)
 
 
-def load_location_metrics(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+def rows(conn: duckdb.DuckDBPyConnection, sql: str, params: Iterable[Any]) -> list[dict[str, Any]]:
+    result = conn.execute(sql, list(params))
+    columns = [description[0] for description in result.description]
+    return [dict(zip(columns, row)) for row in result.fetchall()]
+
+
+def load_location_metrics(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
     params = [*ACTIVE_STATUSES, *CONTINENTAL_US_STATES, *ACTIVE_STATUSES, *CONTINENTAL_US_STATES]
     sql = f"""
     WITH {game_identity_cte(conn)},
@@ -120,9 +125,16 @@ def load_location_metrics(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     FROM active_locations al
     LEFT JOIN placement_identity pi ON pi.location_id = al.location_id
     LEFT JOIN national_counts nc ON nc.canonical_game_id = pi.canonical_game_id
-    GROUP BY al.location_id
+    GROUP BY
+        al.location_id,
+        al.name,
+        al.city,
+        al.state,
+        al.street_address,
+        al.latitude,
+        al.longitude
     """
-    return [dict(row) for row in conn.execute(sql, params)]
+    return rows(conn, sql, params)
 
 
 def city_key(row: dict[str, Any]) -> tuple[str, str]:
@@ -176,7 +188,7 @@ def machine_distribution(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return distribution
 
 
-def build_dashboard_data(conn: sqlite3.Connection) -> dict[str, Any]:
+def build_dashboard_data(conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
     locations = load_location_metrics(conn)
     locations = [row for row in locations if int(row.get("machine_count") or 0) > 0]
 

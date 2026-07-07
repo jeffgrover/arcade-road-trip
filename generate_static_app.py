@@ -13,7 +13,7 @@ from export_static_data import DEFAULT_OUTPUT_DIR, connect as export_connect, lo
 from generate_dashboard import build_dashboard_data, connect as dashboard_connect
 
 
-DEFAULT_DB = Path("aurcade_locations.sqlite")
+DEFAULT_DB = Path("arcade_roadtrip.duckdb")
 DEFAULT_OUTPUT = Path("static/arcade_road_trip.html")
 
 

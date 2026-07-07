@@ -1,9 +1,10 @@
 # Arcade Road Trip Agent Notes
 
 This workspace contains the Arcade Road Trip static atlas plus a curated
-SQLite arcade-location database. The data began with Aurcade, then merged
+DuckDB arcade-location database. The data began with Aurcade, then merged
 Pinball Map and Zenius -I- vanisher sources for trip-planning and arcade
-discovery.
+discovery. The legacy SQLite database remains as a migration source while the
+older writer scripts are ported.
 
 The product direction is one static artifact. The primary user-facing artifact
 is `static/arcade_road_trip.html`, a one-file HTML app with embedded Parquet
@@ -12,13 +13,17 @@ remains as a legacy/reference implementation only; do not add new product
 features there unless they are specifically needed for comparison or local
 debugging.
 
-Public GitHub Pages URL, once Pages is enabled:
+Public GitHub Pages URL:
 
 `https://jeffgrover.github.io/arcade-road-trip/`
 
 ## Important Files
 
-- `aurcade_locations.sqlite`: canonical working database.
+- `arcade_roadtrip.duckdb`: canonical working database for static generation.
+- `migrate_sqlite_to_duckdb.py`: one-way migration from the legacy SQLite
+  snapshot.
+- `aurcade_locations.sqlite`: legacy SQLite source retained while import and
+  curation writers are being ported to DuckDB.
 - `aurcade_locations.baseline_2026-07-05_pinballmap.sqlite`: backup made before
   the Pinball Map import.
 - `scrape_aurcade_locations.py`: Aurcade scraper and original schema creator.
@@ -67,8 +72,10 @@ with Aurcade ids:
 - ZIv location id `N` becomes `-(2000000000 + N)`.
 - ZIv game id `N` becomes `-(2000000000 + N)`.
 
-Do not add columns casually. Current import/query tooling intentionally uses the
-existing tables and columns.
+Do not add columns casually. Current tooling intentionally uses the existing
+tables and columns. DuckDB is canonical for the static build path; several
+older import/validation writers still target the legacy SQLite file and should
+be ported rather than extended in their current form.
 
 Location verification/status data lives in sidecar tables so the imported source
 schema stays intact:
@@ -149,9 +156,9 @@ game search, and embedded Parquet data queried in-browser with DuckDB-WASM.
 Flask remains useful as a legacy/reference implementation and as a convenient
 local static server, but it is no longer required for the app runtime.
 
-The generator intentionally keeps SQLite as the curation database and exports a
-browser-readable snapshot during the build. These generated intermediates are
-ignored by git and folded into the final HTML:
+The generator reads `arcade_roadtrip.duckdb` and exports a browser-readable
+snapshot during the build. These generated intermediates are ignored by git and
+folded into the final HTML:
 
 - `static/data/route_locations.parquet`: active continental U.S. locations with
   coordinates and scoring metrics.
