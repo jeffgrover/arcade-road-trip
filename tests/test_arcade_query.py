@@ -1,11 +1,15 @@
 import unittest
+import sqlite3
 
 from arcade_query import (
     QueryResult,
     fuzzy_score,
     normalize_argv,
+    rare_games,
     render,
     require_readonly_sql,
+    search_games,
+    where_to_play,
 )
 
 
@@ -71,6 +75,70 @@ class ArcadeQueryTests(unittest.TestCase):
         self.assertIn("## Tiny Result", output)
         self.assertIn("sample note", output)
         self.assertIn("| Quarters", output)
+
+    def test_canonical_game_links_collapse_counts(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.executescript(
+            """
+            CREATE TABLE games (
+                game_id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                manufacturer TEXT
+            );
+            CREATE TABLE locations (
+                location_id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                city TEXT,
+                state TEXT,
+                street_address TEXT,
+                source_url TEXT
+            );
+            CREATE TABLE location_games (
+                location_id INTEGER NOT NULL,
+                game_id INTEGER NOT NULL,
+                cabinet_type TEXT,
+                year INTEGER,
+                PRIMARY KEY (location_id, game_id)
+            );
+            CREATE TABLE location_statuses (
+                location_id INTEGER PRIMARY KEY,
+                status TEXT,
+                replacement_name TEXT
+            );
+            CREATE TABLE game_canonical_links (
+                alias_game_id INTEGER PRIMARY KEY,
+                canonical_game_id INTEGER NOT NULL,
+                confidence REAL NOT NULL,
+                reason TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'auto',
+                updated_at TEXT
+            );
+            INSERT INTO games(game_id, name, manufacturer) VALUES
+                (1, 'Tales of the Arabian Nights', 'Williams'),
+                (-2000001364, 'Tales of the Arabian Nights', 'Williams');
+            INSERT INTO locations(location_id, name, city, state) VALUES
+                (10, 'Arcade One', 'Sandy', 'UT'),
+                (11, 'Arcade Two', 'Ogden', 'UT');
+            INSERT INTO location_games(location_id, game_id, cabinet_type) VALUES
+                (10, 1, 'Pinball'),
+                (11, -2000001364, 'Pinball');
+            INSERT INTO game_canonical_links(
+                alias_game_id, canonical_game_id, confidence, reason, source
+            ) VALUES (
+                -2000001364, 1, 1.0, 'exact_compact_title', 'auto'
+            );
+            """
+        )
+
+        rare = rare_games(conn, "UT", max_locations=1, limit=10)
+        search = search_games(conn, "Arabian Nights", limit=10)
+        where = where_to_play(conn, "Arabian Nights", state="UT", limit=10)
+
+        self.assertEqual([], rare.rows)
+        self.assertEqual(1, len(search.rows))
+        self.assertEqual(2, search.rows[0]["location_count"])
+        self.assertEqual(2, len(where.rows))
 
 
 if __name__ == "__main__":

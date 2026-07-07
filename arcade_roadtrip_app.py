@@ -150,6 +150,14 @@ def ensure_cache_schema(conn: sqlite3.Connection) -> None:
     )
 
 
+def has_table(conn: sqlite3.Connection, table_name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table_name,),
+    ).fetchone()
+    return row is not None
+
+
 def http_json(url: str, params: Optional[dict[str, Any]] = None) -> Any:
     if params:
         url = f"{url}?{urllib.parse.urlencode(params)}"
@@ -314,6 +322,15 @@ def batch_highlighted_games(location_ids: list[int]) -> dict[int, list[dict[str,
         return {}
     placeholders = ",".join("?" for _ in location_ids)
     with connect(readonly=True) as conn:
+        canonical_enabled = has_table(conn, "game_canonical_links")
+        canonical_join = (
+            "LEFT JOIN game_canonical_links gcl ON gcl.alias_game_id = g.game_id "
+            "LEFT JOIN games cg ON cg.game_id = gcl.canonical_game_id"
+            if canonical_enabled
+            else ""
+        )
+        canonical_id_expr = "COALESCE(gcl.canonical_game_id, g.game_id)" if canonical_enabled else "g.game_id"
+        canonical_name_expr = "COALESCE(cg.name, g.name)" if canonical_enabled else "g.name"
         inventory_rows = conn.execute(
             f"""
             SELECT
@@ -321,35 +338,38 @@ def batch_highlighted_games(location_ids: list[int]) -> dict[int, list[dict[str,
                 sl.state AS location_state,
                 g.game_id,
                 g.name,
-                lower(g.name) AS game_key,
+                {canonical_id_expr} AS canonical_game_id,
+                {canonical_name_expr} AS canonical_name,
                 COALESCE(lg.cabinet_type, '') AS cabinet_type
             FROM location_games lg
             JOIN locations sl ON sl.location_id = lg.location_id
             JOIN games g ON g.game_id = lg.game_id
+            {canonical_join}
             WHERE lg.location_id IN ({placeholders})
             """,
             location_ids,
         ).fetchall()
 
-        game_keys = sorted({row["game_key"] for row in inventory_rows})
-        if not game_keys:
+        canonical_game_ids = sorted({row["canonical_game_id"] for row in inventory_rows})
+        if not canonical_game_ids:
             return {location_id: [] for location_id in location_ids}
 
-        game_placeholders = ",".join("?" for _ in game_keys)
+        game_placeholders = ",".join("?" for _ in canonical_game_ids)
         state_placeholders = ",".join("?" for _ in CONTINENTAL_US_STATES)
         us_count_rows = conn.execute(
             f"""
-            SELECT lower(g.name) AS game_key, COUNT(DISTINCT lg.location_id) AS us_location_count
+            SELECT {canonical_id_expr} AS canonical_game_id, COUNT(DISTINCT lg.location_id) AS us_location_count
             FROM location_games lg
             JOIN games g ON g.game_id = lg.game_id
+            {canonical_join}
             JOIN locations l ON l.location_id = lg.location_id
             LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
-            WHERE lower(g.name) IN ({game_placeholders})
+            WHERE {canonical_id_expr} IN ({game_placeholders})
               AND l.state IN ({state_placeholders})
               AND COALESCE(ls.status, 'active') IN ('active', 'unverified', 'uncertain', 'matched', 'needs_review')
-            GROUP BY lower(g.name)
+            GROUP BY {canonical_id_expr}
             """,
-            [*game_keys, *CONTINENTAL_US_STATES],
+            [*canonical_game_ids, *CONTINENTAL_US_STATES],
         ).fetchall()
         states = sorted({row["location_state"] for row in inventory_rows if row["location_state"]})
         state_counts: dict[tuple[str, str], int] = {}
@@ -357,32 +377,35 @@ def batch_highlighted_games(location_ids: list[int]) -> dict[int, list[dict[str,
             selected_state_placeholders = ",".join("?" for _ in states)
             state_count_rows = conn.execute(
                 f"""
-                SELECT lower(g.name) AS game_key, l.state, COUNT(DISTINCT lg.location_id) AS state_location_count
+                SELECT {canonical_id_expr} AS canonical_game_id, l.state, COUNT(DISTINCT lg.location_id) AS state_location_count
                 FROM location_games lg
                 JOIN games g ON g.game_id = lg.game_id
+                {canonical_join}
                 JOIN locations l ON l.location_id = lg.location_id
                 LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
-                WHERE lower(g.name) IN ({game_placeholders})
+                WHERE {canonical_id_expr} IN ({game_placeholders})
                   AND l.state IN ({selected_state_placeholders})
                   AND COALESCE(ls.status, 'active') IN ('active', 'unverified', 'uncertain', 'matched', 'needs_review')
-                GROUP BY lower(g.name), l.state
+                GROUP BY {canonical_id_expr}, l.state
                 """,
-                [*game_keys, *states],
+                [*canonical_game_ids, *states],
             ).fetchall()
             state_counts = {
-                (row["game_key"], row["state"]): row["state_location_count"]
+                (row["canonical_game_id"], row["state"]): row["state_location_count"]
                 for row in state_count_rows
             }
 
-    us_counts = {row["game_key"]: row["us_location_count"] for row in us_count_rows}
+    us_counts = {row["canonical_game_id"]: row["us_location_count"] for row in us_count_rows}
     by_location: dict[int, list[dict[str, Any]]] = {location_id: [] for location_id in location_ids}
     for row in inventory_rows:
-        us_location_count = us_counts.get(row["game_key"], 0)
-        state_location_count = state_counts.get((row["game_key"], row["location_state"]), 0)
+        us_location_count = us_counts.get(row["canonical_game_id"], 0)
+        state_location_count = state_counts.get((row["canonical_game_id"], row["location_state"]), 0)
         by_location[row["location_id"]].append(
             {
                 "game_id": row["game_id"],
                 "name": row["name"],
+                "canonical_game_id": row["canonical_game_id"],
+                "canonical_name": row["canonical_name"],
                 "rare_us": us_location_count < 10,
                 "unique_state": state_location_count == 1,
                 "us_location_count": us_location_count,

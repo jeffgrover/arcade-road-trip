@@ -86,6 +86,36 @@ def status_columns(conn: sqlite3.Connection) -> str:
     return ", COALESCE(ls.status, 'active') AS status, ls.replacement_name"
 
 
+def game_identity_cte(conn: sqlite3.Connection) -> str:
+    if has_table(conn, "game_canonical_links"):
+        return """
+        game_identity AS (
+            SELECT
+                g.game_id,
+                COALESCE(gcl.canonical_game_id, g.game_id) AS canonical_game_id,
+                COALESCE(cg.name, g.name) AS canonical_name,
+                COALESCE(cg.manufacturer, g.manufacturer) AS canonical_manufacturer,
+                g.name AS source_name,
+                g.manufacturer AS source_manufacturer
+            FROM games g
+            LEFT JOIN game_canonical_links gcl ON gcl.alias_game_id = g.game_id
+            LEFT JOIN games cg ON cg.game_id = gcl.canonical_game_id
+        )
+        """
+    return """
+    game_identity AS (
+        SELECT
+            g.game_id,
+            g.game_id AS canonical_game_id,
+            g.name AS canonical_name,
+            g.manufacturer AS canonical_manufacturer,
+            g.name AS source_name,
+            g.manufacturer AS source_manufacturer
+        FROM games g
+    )
+    """
+
+
 def require_readonly_sql(sql: str) -> None:
     stripped = sql.strip().lower()
     allowed_prefixes = ("select", "with", "pragma")
@@ -170,6 +200,11 @@ def render(result: QueryResult, output_format: str) -> str:
 def summary(conn: sqlite3.Connection, include_inactive: bool = False) -> QueryResult:
     status_join = location_status_join(conn)
     active_clause = active_location_clause(conn, include_inactive=include_inactive)
+    canonical_links_metric = (
+        "UNION ALL SELECT 'game_canonical_links', COUNT(*) FROM game_canonical_links"
+        if has_table(conn, "game_canonical_links")
+        else ""
+    )
     sql = """
     SELECT 'locations' AS metric, COUNT(*) AS value FROM locations
     UNION ALL SELECT 'active_locations', COUNT(*) FROM locations l {status_join} WHERE {active_clause}
@@ -184,7 +219,12 @@ def summary(conn: sqlite3.Connection, include_inactive: bool = False) -> QueryRe
     UNION ALL SELECT 'active_location_games', COUNT(*) FROM location_games lg JOIN locations l ON l.location_id = lg.location_id {status_join} WHERE {active_clause}
     UNION ALL SELECT 'pinball_rows', COUNT(*) FROM location_games WHERE cabinet_type = 'Pinball'
     UNION ALL SELECT 'active_pinball_rows', COUNT(*) FROM location_games lg JOIN locations l ON l.location_id = lg.location_id {status_join} WHERE lg.cabinet_type = 'Pinball' AND {active_clause}
-    """.format(status_join=status_join, active_clause=active_clause)
+    {canonical_links_metric}
+    """.format(
+        status_join=status_join,
+        active_clause=active_clause,
+        canonical_links_metric=canonical_links_metric,
+    )
     return run_query(conn, sql, title="Database Summary")
 
 
@@ -277,22 +317,28 @@ def search_games(conn: sqlite3.Connection, query: str, limit: int, include_inact
     status_join = location_status_join(conn)
     active_clause = active_location_clause(conn, include_inactive=include_inactive)
     sql = f"""
+    WITH {game_identity_cte(conn)}
     SELECT
-        g.game_id, g.name, g.manufacturer,
+        gi.canonical_game_id AS game_id,
+        gi.canonical_name AS name,
+        gi.canonical_manufacturer AS manufacturer,
+        COUNT(DISTINCT gi.game_id) AS source_game_rows,
         COUNT(CASE WHEN {active_clause} THEN lg.location_id END) AS location_count,
         COUNT(CASE WHEN l.state = 'UT' AND {active_clause} THEN 1 END) AS ut_location_count
-    FROM games g
-    LEFT JOIN location_games lg ON lg.game_id = g.game_id
+    FROM game_identity gi
+    LEFT JOIN location_games lg ON lg.game_id = gi.game_id
     LEFT JOIN locations l ON l.location_id = lg.location_id
     {status_join}
-    WHERE lower(g.name) LIKE lower(?)
-       OR lower(COALESCE(g.manufacturer, '')) LIKE lower(?)
-    GROUP BY g.game_id, g.name, g.manufacturer
-    ORDER BY ut_location_count DESC, location_count DESC, g.name
+    WHERE lower(gi.source_name) LIKE lower(?)
+       OR lower(gi.canonical_name) LIKE lower(?)
+       OR lower(COALESCE(gi.source_manufacturer, '')) LIKE lower(?)
+       OR lower(COALESCE(gi.canonical_manufacturer, '')) LIKE lower(?)
+    GROUP BY gi.canonical_game_id, gi.canonical_name, gi.canonical_manufacturer
+    ORDER BY ut_location_count DESC, location_count DESC, gi.canonical_name
     LIMIT ?
     """
     like = f"%{query}%"
-    result = run_query(conn, sql, (like, like, limit), title=f"Games Matching: {query!r}")
+    result = run_query(conn, sql, (like, like, like, like, limit), title=f"Games Matching: {query!r}")
     if len(result.rows) < limit:
         result = add_fuzzy_game_rows(conn, query, result, limit, include_inactive)
     return result
@@ -307,15 +353,19 @@ def add_fuzzy_game_rows(
     candidates = rows_from_cursor(
         conn.execute(
             f"""
+            WITH {game_identity_cte(conn)}
             SELECT
-                g.game_id, g.name, g.manufacturer,
+                gi.canonical_game_id AS game_id,
+                gi.canonical_name AS name,
+                gi.canonical_manufacturer AS manufacturer,
+                COUNT(DISTINCT gi.game_id) AS source_game_rows,
                 COUNT(CASE WHEN {active_clause} THEN lg.location_id END) AS location_count,
                 COUNT(CASE WHEN l.state = 'UT' AND {active_clause} THEN 1 END) AS ut_location_count
-            FROM games g
-            LEFT JOIN location_games lg ON lg.game_id = g.game_id
+            FROM game_identity gi
+            LEFT JOIN location_games lg ON lg.game_id = gi.game_id
             LEFT JOIN locations l ON l.location_id = lg.location_id
             {status_join}
-            GROUP BY g.game_id, g.name, g.manufacturer
+            GROUP BY gi.canonical_game_id, gi.canonical_name, gi.canonical_manufacturer
             """
         )
     )
@@ -358,19 +408,21 @@ def where_to_play(
     active_clause = active_location_clause(conn, include_inactive=include_inactive)
     extra_columns = status_columns(conn)
     sql = f"""
+    WITH {game_identity_cte(conn)}
     SELECT
         l.location_id, l.name AS location, l.city, l.state, l.street_address,
-        g.name AS game, g.manufacturer, lg.year, lg.cabinet_type,
+        gi.canonical_name AS game, gi.canonical_manufacturer AS manufacturer,
+        gi.source_name AS source_game, lg.year, lg.cabinet_type,
         l.source_url
         {extra_columns}
     FROM location_games lg
     JOIN locations l ON l.location_id = lg.location_id
-    JOIN games g ON g.game_id = lg.game_id
+    JOIN game_identity gi ON gi.game_id = lg.game_id
     {status_join}
-    WHERE lg.game_id IN ({placeholders})
+    WHERE gi.canonical_game_id IN ({placeholders})
     AND {active_clause}
     {state_clause}
-    ORDER BY l.state, l.city, l.name, g.name
+    ORDER BY l.state, l.city, l.name, gi.canonical_name
     LIMIT ?
     """
     notes = [
@@ -454,16 +506,17 @@ def compare_locations(
     if left is None or right is None:
         return QueryResult("Compare Locations", [], [], ["Could not resolve both locations."])
     sql = """
-    WITH left_games AS (
-        SELECT g.game_id, g.name, g.manufacturer
+    WITH {game_identity},
+    left_games AS (
+        SELECT gi.canonical_game_id AS game_id, gi.canonical_name AS name, gi.canonical_manufacturer AS manufacturer
         FROM location_games lg
-        JOIN games g ON g.game_id = lg.game_id
+        JOIN game_identity gi ON gi.game_id = lg.game_id
         WHERE lg.location_id = ?
     ),
     right_games AS (
-        SELECT g.game_id, g.name, g.manufacturer
+        SELECT gi.canonical_game_id AS game_id, gi.canonical_name AS name, gi.canonical_manufacturer AS manufacturer
         FROM location_games lg
-        JOIN games g ON g.game_id = lg.game_id
+        JOIN game_identity gi ON gi.game_id = lg.game_id
         WHERE lg.location_id = ?
     )
     SELECT 'shared' AS bucket, name, manufacturer, game_id
@@ -479,7 +532,7 @@ def compare_locations(
     WHERE game_id NOT IN (SELECT game_id FROM left_games)
     ORDER BY bucket, name
     LIMIT ?
-    """
+    """.format(game_identity=game_identity_cte(conn).strip())
     notes = [f"Left: {location_note(left)}", f"Right: {location_note(right)}"]
     return run_query(conn, sql, (left["location_id"], right["location_id"], limit), title="Compare Locations", notes=notes)
 
@@ -499,10 +552,12 @@ def rare_games(
         params.append(state)
     params.extend([max_locations, limit])
     sql = f"""
-    WITH scoped AS (
-        SELECT g.game_id, g.name, g.manufacturer, l.location_id
-        FROM games g
-        JOIN location_games lg ON lg.game_id = g.game_id
+    WITH {game_identity_cte(conn)},
+    scoped AS (
+        SELECT gi.canonical_game_id AS game_id, gi.canonical_name AS name,
+               gi.canonical_manufacturer AS manufacturer, l.location_id
+        FROM game_identity gi
+        JOIN location_games lg ON lg.game_id = gi.game_id
         JOIN locations l ON l.location_id = lg.location_id
         {status_join}
         WHERE {active_clause}
@@ -881,6 +936,41 @@ def review_queue(conn: sqlite3.Connection, state: Optional[str], limit: int) -> 
     return run_query(conn, sql, params, title="Review Queue")
 
 
+def game_aliases(conn: sqlite3.Connection, query: Optional[str], limit: int) -> QueryResult:
+    if not has_table(conn, "game_canonical_links"):
+        return QueryResult("Game Canonical Links", [], [], ["game_canonical_links table does not exist yet."])
+    query_clause = ""
+    params: list[Any] = []
+    if query:
+        query_clause = """
+        WHERE lower(alias.name) LIKE lower(?)
+           OR lower(canonical.name) LIKE lower(?)
+           OR lower(COALESCE(alias.manufacturer, '')) LIKE lower(?)
+           OR lower(COALESCE(canonical.manufacturer, '')) LIKE lower(?)
+        """
+        like = f"%{query}%"
+        params.extend([like, like, like, like])
+    params.append(limit)
+    sql = f"""
+    SELECT
+        gcl.alias_game_id,
+        alias.name AS alias_name,
+        gcl.canonical_game_id,
+        canonical.name AS canonical_name,
+        gcl.confidence,
+        gcl.reason,
+        gcl.source,
+        gcl.updated_at
+    FROM game_canonical_links gcl
+    JOIN games alias ON alias.game_id = gcl.alias_game_id
+    JOIN games canonical ON canonical.game_id = gcl.canonical_game_id
+    {query_clause}
+    ORDER BY gcl.confidence DESC, canonical.name, alias.name
+    LIMIT ?
+    """
+    return run_query(conn, sql, params, title="Game Canonical Links")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Query the local arcade SQLite database.")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="SQLite database path.")
@@ -982,6 +1072,10 @@ def build_parser() -> argparse.ArgumentParser:
     review_parser.add_argument("--state")
     review_parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
 
+    aliases_parser = subparsers.add_parser("game-aliases", help="List canonical game links.")
+    aliases_parser.add_argument("query", nargs="?")
+    aliases_parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+
     return parser
 
 
@@ -1045,6 +1139,8 @@ def dispatch(conn: sqlite3.Connection, args: argparse.Namespace) -> QueryResult:
         return duplicate_leads(conn, args.state, args.limit)
     if args.command == "review-queue":
         return review_queue(conn, args.state, args.limit)
+    if args.command == "game-aliases":
+        return game_aliases(conn, args.query, args.limit)
     raise ValueError(f"Unknown command: {args.command}")
 
 

@@ -14,6 +14,8 @@ This workspace contains the local Arcade Road Trip prototype plus a curated SQLi
 - `import_ziv_locations.py`: Zenius -I- vanisher Utah location/machine importer.
 - `merge_ziv_machines.py`: second-pass ZIv machine inventory merger for
   already-linked Utah locations.
+- `canonicalize_games.py`: conservative game-title canonicalization pass that
+  writes source-specific duplicate mappings to a sidecar table.
 - `curate_us_sources.py`: conservative national source-curation orchestrator.
 - `arcade_query.py`: read-only query CLI intended for Codex/LLM use.
 - `arcade_roadtrip_app.py`: local Flask route-planning prototype for Arcade Road Trip.
@@ -59,6 +61,21 @@ schema stays intact:
 - `ziv_location_links`: local location id to Zenius -I- vanisher arcade id
   links discovered by fuzzy matching ZIv's U.S. arcade directory against local
   U.S. locations.
+- `game_canonical_links`: source-specific game rows that should be interpreted
+  as the same canonical game for counts, rarity, and matching. This preserves
+  original `games` and `location_games` rows instead of rewriting imports.
+
+Game canonicalization is intentionally conservative:
+
+```bash
+python3 canonicalize_games.py --report
+python3 canonicalize_games.py --apply --report
+python3 arcade_query.py game-aliases "Arabian"
+```
+
+Auto-links should be boring exact compact-title matches with no conflicting
+manufacturer evidence. Risky edition, sequel, short-name, and fuzzy-spelling
+pairs stay in the generated report for human review.
 
 Known curated status:
 
@@ -96,6 +113,7 @@ python3 arcade_query.py summary
 python3 arcade_query.py city-summary --state UT --limit 10
 python3 arcade_query.py locations "Quarters"
 python3 arcade_query.py games "Godzilla"
+python3 arcade_query.py game-aliases "Arabian"
 python3 arcade_query.py where Godzilla --limit 10
 python3 arcade_query.py inventory "Nickel Mania Murray"
 python3 arcade_query.py nearby --lat 40.7608 --lon -111.891 --miles 10
