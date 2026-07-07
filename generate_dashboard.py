@@ -295,6 +295,8 @@ def build_html(data: dict[str, Any]) -> str:
     h2 {{ font-size: 24px; margin: 0; }}
     .note {{ color: var(--muted); font-size: 13px; margin: 4px 0 0; }}
     .grid-2 {{ display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }}
+    .matched-panel-grid {{ align-items: stretch; }}
+    .matched-panel-grid > div {{ display: flex; flex-direction: column; min-height: 0; }}
     .map-shell {{ display: grid; gap: 10px; }}
     .panel {{ background: var(--paper); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; box-shadow: 0 8px 26px rgba(20, 38, 52, .07); }}
     .panel-pad {{ padding: 16px; }}
@@ -305,6 +307,9 @@ def build_html(data: dict[str, Any]) -> str:
     th {{ position: sticky; top: 0; background: #f9fbfc; z-index: 1; color: #344454; font-size: 12px; cursor: pointer; user-select: none; }}
     td.name {{ font-weight: 750; color: #203040; }}
     .table-wrap {{ max-height: 560px; overflow: auto; }}
+    .matched-panel-grid .table-wrap, .chart-panel {{ height: 560px; }}
+    .chart-panel {{ display: flex; align-items: stretch; }}
+    .chart-panel svg {{ flex: 1 1 auto; min-height: 0; }}
     .sorter {{ display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }}
     .sorter button {{ border: 1px solid var(--line); background: white; border-radius: 999px; padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer; }}
     .sorter button.active {{ background: #0b5963; border-color: #0b5963; color: white; }}
@@ -313,7 +318,7 @@ def build_html(data: dict[str, Any]) -> str:
     .bar span:first-child {{ height: 8px; border-radius: 999px; background: linear-gradient(90deg, var(--teal), var(--gold)); min-width: 2px; }}
     .small {{ color: var(--muted); font-size: 12px; }}
     .rare {{ color: var(--rare); font-weight: 800; }}
-    #machine-distribution {{ width: 100%; min-height: 420px; display: block; }}
+    #machine-distribution {{ width: 100%; height: 100%; display: block; }}
     .footer {{ margin-top: 26px; color: var(--muted); font-size: 13px; }}
     @media (max-width: 980px) {{
       .hero, .grid-2 {{ grid-template-columns: 1fr; }}
@@ -330,7 +335,9 @@ def build_html(data: dict[str, Any]) -> str:
       <div class="navlinks">
         <a href="#cities">Destinations</a>
         <a href="#hotspots">Hotspots</a>
+        <a class="cta" href="/static/arcade_road_trip.html">Open Atlas</a>
         <a class="cta" href="/planner">Plan a Route</a>
+        <a href="/static/duckdb_planner.html">Static Prototype</a>
       </div>
     </nav>
     <div class="hero">
@@ -374,7 +381,7 @@ def build_html(data: dict[str, Any]) -> str:
       <div class="panel table-wrap"><table id="city-table"></table></div>
     </section>
 
-    <section class="grid-2">
+    <section class="grid-2 matched-panel-grid">
       <div>
         <div class="section-head">
           <div>
@@ -396,7 +403,7 @@ def build_html(data: dict[str, Any]) -> str:
             <p class="note">Most playable places are small; the long tail of large museums, pinball halls, and mega-arcades carries a lot of the inventory.</p>
           </div>
         </div>
-        <div class="panel panel-pad"><svg id="machine-distribution" viewBox="0 0 760 430" role="img" aria-label="Distribution of machines per arcade"></svg></div>
+        <div class="panel panel-pad chart-panel"><svg id="machine-distribution" viewBox="0 0 760 560" role="img" aria-label="Distribution of machines per arcade"></svg></div>
       </div>
     </section>
 
@@ -509,8 +516,8 @@ def build_html(data: dict[str, Any]) -> str:
     function renderMachineDistribution() {{
       const svg = byId('machine-distribution');
       const rows = DATA.machine_distribution;
-      const width = 760, height = 430;
-      const pad = {{left: 64, right: 28, top: 28, bottom: 72}};
+      const width = 760, height = 560;
+      const pad = {{left: 64, right: 28, top: 34, bottom: 56}};
       const plotWidth = width - pad.left - pad.right;
       const plotHeight = height - pad.top - pad.bottom;
       const maxArcades = Math.max(...rows.map(row => row.arcades), 1);
@@ -528,7 +535,7 @@ def build_html(data: dict[str, Any]) -> str:
             <rect x="${{x}}" y="${{y}}" width="${{barWidth}}" height="${{h}}" rx="5" fill="${{fill}}" opacity=".86">
               <title>${{row.label}} machines: ${{format.format(row.arcades)}} arcades, ${{format.format(row.machines)}} machines, ${{format.format(row.rare_us_machines)}} rare U.S. hits</title>
             </rect>
-            <text x="${{x + barWidth / 2}}" y="${{height - 42}}" text-anchor="middle" font-size="12" fill="#344454">${{row.label}}</text>
+            <text x="${{x + barWidth / 2}}" y="${{height - 31}}" text-anchor="middle" font-size="12" fill="#344454">${{row.label}}</text>
             <text x="${{x + barWidth / 2}}" y="${{y - 8}}" text-anchor="middle" font-size="12" font-weight="800" fill="#15202b">${{format.format(row.arcades)}}</text>
           </g>`;
       }}).join('');
@@ -546,7 +553,7 @@ def build_html(data: dict[str, Any]) -> str:
         <line x1="${{pad.left}}" y1="${{pad.top + plotHeight}}" x2="${{width - pad.right}}" y2="${{pad.top + plotHeight}}" stroke="#ccd6df"/>
         <line x1="${{pad.left}}" y1="${{pad.top}}" x2="${{pad.left}}" y2="${{pad.top + plotHeight}}" stroke="#ccd6df"/>
         <text x="18" y="${{pad.top + plotHeight / 2}}" transform="rotate(-90 18 ${{pad.top + plotHeight / 2}})" text-anchor="middle" font-size="12" fill="#5b6672">Arcade count</text>
-        <text x="${{width / 2}}" y="${{height - 14}}" text-anchor="middle" font-size="12" fill="#5b6672">Known machines at one arcade</text>
+        <text x="${{width / 2}}" y="${{height - 10}}" text-anchor="middle" font-size="12" fill="#5b6672">Known machines at one arcade</text>
         ${{bars}}
         <path d="${{machineLine}}" fill="none" stroke="#15202b" stroke-width="2.5" stroke-linejoin="round"/>
         ${{machineDots}}

@@ -485,6 +485,9 @@ def plan_stops(route: dict[str, Any], max_detour_miles: float, scope: str, limit
 
 @app.get("/")
 def index() -> str:
+    static_app_path = Path("static/arcade_road_trip.html")
+    if static_app_path.exists():
+        return send_from_directory("static", "arcade_road_trip.html")
     dashboard_path = Path("static/dashboard.html")
     if dashboard_path.exists():
         return send_from_directory("static", "dashboard.html")

@@ -1,0 +1,260 @@
+#!/usr/bin/env python3
+"""Export browser-queryable Arcade Road Trip Parquet snapshots.
+
+The Flask app remains the reference implementation. This script creates a
+read-only static data bundle for the DuckDB-WASM planner prototype.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Iterable
+
+from us_states import CONTINENTAL_US_STATES
+
+
+DEFAULT_DB = Path("aurcade_locations.sqlite")
+DEFAULT_OUTPUT_DIR = Path("static/data")
+DEFAULT_PLANNER_TEMPLATE = Path("static/duckdb_planner.html")
+DEFAULT_EMBEDDED_PLANNER = Path("static/duckdb_planner_embedded.html")
+ACTIVE_STATUSES = ("active", "unverified", "uncertain", "matched", "needs_review")
+
+
+def connect(db_path: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def has_table(conn: sqlite3.Connection, table_name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table_name,),
+    ).fetchone()
+    return row is not None
+
+
+def game_identity_cte(conn: sqlite3.Connection) -> str:
+    if has_table(conn, "game_canonical_links"):
+        return """
+        game_identity AS (
+            SELECT
+                g.game_id,
+                g.name,
+                COALESCE(gcl.canonical_game_id, g.game_id) AS canonical_game_id,
+                COALESCE(cg.name, g.name) AS canonical_name
+            FROM games g
+            LEFT JOIN game_canonical_links gcl ON gcl.alias_game_id = g.game_id
+            LEFT JOIN games cg ON cg.game_id = gcl.canonical_game_id
+        )
+        """
+    return """
+    game_identity AS (
+        SELECT g.game_id, g.name, g.game_id AS canonical_game_id, g.name AS canonical_name
+        FROM games g
+    )
+    """
+
+
+def placeholders(values: Iterable[Any]) -> str:
+    return ",".join("?" for _ in values)
+
+
+def rows(conn: sqlite3.Connection, sql: str, params: Iterable[Any]) -> list[dict[str, Any]]:
+    return [dict(row) for row in conn.execute(sql, list(params)).fetchall()]
+
+
+def load_route_locations(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    status_sql = placeholders(ACTIVE_STATUSES)
+    state_sql = placeholders(CONTINENTAL_US_STATES)
+    params = [*ACTIVE_STATUSES, *CONTINENTAL_US_STATES]
+    sql = f"""
+    WITH {game_identity_cte(conn)},
+    active_locations AS (
+        SELECT
+            l.location_id,
+            l.name,
+            COALESCE(l.city, '') AS city,
+            COALESCE(l.state, '') AS state,
+            COALESCE(l.street_address, '') AS street_address,
+            l.latitude,
+            l.longitude,
+            COALESCE(ls.status, 'active') AS status
+        FROM locations l
+        LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
+        WHERE COALESCE(ls.status, 'active') IN ({status_sql})
+          AND l.state IN ({state_sql})
+          AND l.latitude IS NOT NULL
+          AND l.longitude IS NOT NULL
+    )
+    SELECT
+        al.location_id,
+        al.name,
+        al.city,
+        al.state,
+        al.street_address,
+        CAST(al.latitude AS REAL) AS latitude,
+        CAST(al.longitude AS REAL) AS longitude,
+        al.status,
+        COUNT(lg.game_id) AS game_count,
+        COUNT(DISTINCT gi.canonical_game_id) AS unique_game_count,
+        SUM(CASE WHEN lg.cabinet_type = 'Pinball' THEN 1 ELSE 0 END) AS pinball_games,
+        SUM(CASE WHEN lower(COALESCE(lg.cabinet_type, '')) IN ('music game', 'rhythm')
+                  OR lower(gi.name) LIKE '%dance%'
+                  OR lower(gi.name) LIKE '%pump it up%'
+                  OR lower(gi.name) LIKE '%sound voltex%'
+                 THEN 1 ELSE 0 END) AS rhythm_games,
+        TRIM(
+            (CASE WHEN pll.location_id IS NOT NULL THEN 'Pinball Map ' ELSE '' END) ||
+            (CASE WHEN zll.location_id IS NOT NULL THEN 'ZIv ' ELSE '' END)
+        ) AS source_tags
+    FROM active_locations al
+    LEFT JOIN location_games lg ON lg.location_id = al.location_id
+    LEFT JOIN game_identity gi ON gi.game_id = lg.game_id
+    LEFT JOIN pinballmap_location_links pll ON pll.location_id = al.location_id
+    LEFT JOIN ziv_location_links zll ON zll.location_id = al.location_id
+    GROUP BY al.location_id
+    HAVING COUNT(lg.game_id) > 0
+    """
+    return rows(conn, sql, params)
+
+
+def load_location_games(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    status_sql = placeholders(ACTIVE_STATUSES)
+    state_sql = placeholders(CONTINENTAL_US_STATES)
+    params = [
+        *ACTIVE_STATUSES,
+        *CONTINENTAL_US_STATES,
+        *ACTIVE_STATUSES,
+        *CONTINENTAL_US_STATES,
+        *ACTIVE_STATUSES,
+        *CONTINENTAL_US_STATES,
+    ]
+    sql = f"""
+    WITH {game_identity_cte(conn)},
+    active_locations AS (
+        SELECT l.location_id, l.state
+        FROM locations l
+        LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
+        WHERE COALESCE(ls.status, 'active') IN ({status_sql})
+          AND l.state IN ({state_sql})
+    ),
+    us_counts AS (
+        SELECT gi.canonical_game_id, COUNT(DISTINCT lg.location_id) AS us_location_count
+        FROM location_games lg
+        JOIN game_identity gi ON gi.game_id = lg.game_id
+        JOIN locations l ON l.location_id = lg.location_id
+        LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
+        WHERE COALESCE(ls.status, 'active') IN ({status_sql})
+          AND l.state IN ({state_sql})
+        GROUP BY gi.canonical_game_id
+    ),
+    state_counts AS (
+        SELECT gi.canonical_game_id, l.state, COUNT(DISTINCT lg.location_id) AS state_location_count
+        FROM location_games lg
+        JOIN game_identity gi ON gi.game_id = lg.game_id
+        JOIN locations l ON l.location_id = lg.location_id
+        LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
+        WHERE COALESCE(ls.status, 'active') IN ({status_sql})
+          AND l.state IN ({state_sql})
+        GROUP BY gi.canonical_game_id, l.state
+    )
+    SELECT
+        lg.location_id,
+        al.state AS location_state,
+        lg.game_id,
+        gi.name,
+        gi.canonical_game_id,
+        gi.canonical_name,
+        COALESCE(lg.cabinet_type, '') AS cabinet_type,
+        COALESCE(uc.us_location_count, 0) AS us_location_count,
+        COALESCE(sc.state_location_count, 0) AS state_location_count,
+        CASE WHEN COALESCE(uc.us_location_count, 0) < 10 THEN 1 ELSE 0 END AS rare_us,
+        CASE WHEN COALESCE(sc.state_location_count, 0) = 1 THEN 1 ELSE 0 END AS unique_state
+    FROM location_games lg
+    JOIN active_locations al ON al.location_id = lg.location_id
+    JOIN game_identity gi ON gi.game_id = lg.game_id
+    LEFT JOIN us_counts uc ON uc.canonical_game_id = gi.canonical_game_id
+    LEFT JOIN state_counts sc ON sc.canonical_game_id = gi.canonical_game_id AND sc.state = al.state
+    """
+    return rows(conn, sql, params)
+
+
+def write_parquet(records: list[dict[str, Any]], output_path: Path) -> None:
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+    except ImportError as exc:
+        raise SystemExit(
+            "Missing dependency: pyarrow. Run `python3 -m pip install -r requirements.txt` "
+            "or install pyarrow in your active environment."
+        ) from exc
+
+    table = pa.Table.from_pylist(records)
+    pq.write_table(table, output_path, compression="zstd")
+
+
+def write_embedded_planner(template_path: Path, output_path: Path, data_dir: Path) -> None:
+    template = template_path.read_text()
+    embedded = {
+        "route_locations": base64.b64encode((data_dir / "route_locations.parquet").read_bytes()).decode("ascii"),
+        "location_games": base64.b64encode((data_dir / "location_games.parquet").read_bytes()).decode("ascii"),
+        "manifest": json.loads((data_dir / "manifest.json").read_text()),
+    }
+    payload = json.dumps(embedded, ensure_ascii=True, separators=(",", ":"))
+    marker = "const EMBEDDED_PARQUET = null;"
+    if marker not in template:
+        raise SystemExit(f"Could not find embedded-data marker in {template_path}")
+    output_path.write_text(template.replace(marker, f"const EMBEDDED_PARQUET = {payload};"))
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Export static DuckDB-WASM Parquet data.")
+    parser.add_argument("--db", type=Path, default=DEFAULT_DB)
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--planner-template", type=Path, default=DEFAULT_PLANNER_TEMPLATE)
+    parser.add_argument("--embedded-planner", type=Path, default=DEFAULT_EMBEDDED_PLANNER)
+    parser.add_argument("--skip-embedded-planner", action="store_true")
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    with connect(args.db) as conn:
+        route_locations = load_route_locations(conn)
+        location_games = load_location_games(conn)
+
+    route_path = args.output_dir / "route_locations.parquet"
+    games_path = args.output_dir / "location_games.parquet"
+    write_parquet(route_locations, route_path)
+    write_parquet(location_games, games_path)
+
+    manifest = {
+        "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "files": {
+            "route_locations": route_path.name,
+            "location_games": games_path.name,
+        },
+        "counts": {
+            "route_locations": len(route_locations),
+            "location_games": len(location_games),
+        },
+    }
+    (args.output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    print(f"wrote {route_path} ({len(route_locations)} locations)")
+    print(f"wrote {games_path} ({len(location_games)} game placements)")
+    print(f"wrote {args.output_dir / 'manifest.json'}")
+    if not args.skip_embedded_planner:
+        write_embedded_planner(args.planner_template, args.embedded_planner, args.output_dir)
+        print(f"wrote {args.embedded_planner}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
