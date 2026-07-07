@@ -7,6 +7,9 @@ __pycache__/
 venv/
 cache/
 reports/
+static/dashboard.html
+static/duckdb_planner*.html
+static/data/
 *.backup*.sqlite
 *.baseline*.sqlite
 backups/

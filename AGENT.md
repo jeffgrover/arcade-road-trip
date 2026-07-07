@@ -5,11 +5,12 @@ SQLite arcade-location database. The data began with Aurcade, then merged
 Pinball Map and Zenius -I- vanisher sources for trip-planning and arcade
 discovery.
 
-The product direction is static-first. The primary user-facing artifact is
-`static/arcade_road_trip.html`, a one-file HTML app with embedded Parquet data
-queried in-browser by DuckDB-WASM. The Flask client/server prototype remains as
-a legacy/reference implementation only; do not add new product features there
-unless they are specifically needed for comparison or local debugging.
+The product direction is one static artifact. The primary user-facing artifact
+is `static/arcade_road_trip.html`, a one-file HTML app with embedded Parquet
+data queried in-browser by DuckDB-WASM. The Flask client/server prototype
+remains as a legacy/reference implementation only; do not add new product
+features there unless they are specifically needed for comparison or local
+debugging.
 
 Public GitHub Pages URL, once Pages is enabled:
 
@@ -31,13 +32,13 @@ Public GitHub Pages URL, once Pages is enabled:
   writes source-specific duplicate mappings to a sidecar table.
 - `curate_us_sources.py`: conservative national source-curation orchestrator.
 - `arcade_query.py`: read-only query CLI intended for Codex/LLM use.
-- `arcade_roadtrip_app.py`: legacy Flask route-planning prototype/reference.
-- `generate_dashboard.py`: static destination-dashboard generator. It writes
-  `static/dashboard.html` from the current SQLite snapshot.
-- `export_static_data.py`: exports read-only Parquet files for the static
-  DuckDB-WASM planner prototype under `static/data/`.
-- `static/duckdb_planner.html`: browser-only route planner prototype that uses
-  DuckDB-WASM to query the exported Parquet files.
+- `arcade_roadtrip_app.py`: legacy Flask route-planning prototype/reference and
+  local static server.
+- `generate_dashboard.py`: destination-dashboard data builder used by the
+  one-file atlas. Its standalone HTML output is historical/development-only.
+- `export_static_data.py`: shared Parquet snapshot builder used by the one-file
+  atlas. The `static/data/` files are generated intermediates, not product
+  artifacts.
 - `generate_static_app.py`: generates the primary one-file static atlas at
   `static/arcade_road_trip.html`, combining dashboard, planner, game search,
   and embedded Parquet data.
@@ -133,9 +134,9 @@ explicit typed searches, and OSRM demo routing. Treat these public services as
 local/light-use prototype dependencies only; keep geocoding cached and avoid
 autocomplete or bulk requests.
 
-## Static DuckDB-WASM Prototype
+## Static Atlas Pipeline
 
-The primary user-facing prototype is now a one-file static atlas:
+The primary user-facing app is a one-file static atlas:
 
 ```bash
 .venv/bin/pip install -r requirements.txt
@@ -148,39 +149,19 @@ game search, and embedded Parquet data queried in-browser with DuckDB-WASM.
 Flask remains useful as a legacy/reference implementation and as a convenient
 local static server, but it is no longer required for the app runtime.
 
-The serverless prototype keeps SQLite as the curation database and exports a
-browser-readable snapshot instead of replacing the working Flask path. Install
-dependencies, export Parquet, then serve the repo with any static or Flask
-server:
-
-```bash
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python export_static_data.py
-.venv/bin/python generate_dashboard.py
-.venv/bin/python arcade_roadtrip_app.py
-```
-
-Open `http://127.0.0.1:5000/static/duckdb_planner.html`. The page loads
-DuckDB-WASM from a CDN, registers `static/data/route_locations.parquet` and
-`static/data/location_games.parquet`, and runs route-corridor queries entirely
-in the browser. It still calls public Nominatim and OSRM endpoints from the
-browser for typed geocoding and route geometry, so treat it as a proof of
-concept rather than a no-network offline planner.
-
-Generated static data files:
+The generator intentionally keeps SQLite as the curation database and exports a
+browser-readable snapshot during the build. These generated intermediates are
+ignored by git and folded into the final HTML:
 
 - `static/data/route_locations.parquet`: active continental U.S. locations with
   coordinates and scoring metrics.
 - `static/data/location_games.parquet`: active continental U.S. machine rows
   with canonical game identity, U.S. rarity, and state uniqueness counts.
-- `static/data/manifest.json`: export timestamp and row counts.
 
-`export_static_data.py` also writes `static/duckdb_planner_embedded.html`, a
-self-contained version with the Parquet bytes embedded as base64. Use that file
-when opening directly from the filesystem. Browsers generally do not let
-DuckDB-WASM fetch sibling Parquet files from `file://` URLs, and Linux document
-portal paths such as `/run/user/.../doc/...` can move the HTML away from its
-`data/` directory.
+Earlier standalone outputs, including `static/dashboard.html`,
+`static/duckdb_planner.html`, and `static/duckdb_planner_embedded.html`, were
+transitional artifacts. Do not revive them as product surfaces; fold useful
+behavior into `generate_static_app.py` instead.
 
 ## Querying the Data
 

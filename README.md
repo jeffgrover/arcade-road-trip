@@ -3,18 +3,15 @@
 Arcade Road Trip is a portable static atlas for finding arcade destinations,
 rare machines, and playable stops along a road trip.
 
-The current product direction is **static-first**: the user-facing app is a
-single generated HTML file with embedded Parquet data queried in the browser by
-DuckDB-WASM. The old Flask client/server prototype is retained as a legacy
-reference and convenient local server, but it is no longer the primary runtime.
+The current product direction is **one static artifact**: the user-facing app is
+`static/arcade_road_trip.html`, a single generated HTML file with embedded
+Parquet data queried in the browser by DuckDB-WASM. The old Flask client/server
+prototype is retained only as a legacy reference and convenient local static
+server; it is no longer the product runtime.
 
-Published app, once GitHub Pages is enabled:
+Published app:
 
 <https://jeffgrover.github.io/arcade-road-trip/>
-
-Direct atlas artifact:
-
-<https://jeffgrover.github.io/arcade-road-trip/static/arcade_road_trip.html>
 
 ## Primary Static App
 
@@ -40,21 +37,24 @@ tiles, typed geocoding, OSRM route geometry, and the DuckDB-WASM CDN.
 
 ## Data Tooling
 
-The SQLite database remains the curation source of truth:
+The SQLite database remains the curation source of truth. The generation
+pipeline flows from SQLite, through narrow data builders, into one deployable
+HTML artifact:
 
 - `aurcade_locations.sqlite`: curated working database.
 - `arcade_query.py`: read-only CLI for analysis.
 - `curate_us_sources.py`: national source-enrichment orchestrator.
-- `generate_static_app.py`: primary static app generator.
-- `export_static_data.py`: Parquet/static planner export helper.
-- `arcade_roadtrip_app.py`: legacy Flask reference implementation.
+- `export_static_data.py`: shared Parquet snapshot builders used by the atlas.
+- `generate_dashboard.py`: shared destination-summary builder used by the atlas.
+- `generate_static_app.py`: primary generator for `static/arcade_road_trip.html`.
+- `arcade_roadtrip_app.py`: legacy Flask reference/local static server.
 
 This repository grew out of an Aurcade scrape, then merged in Pinball Map and
 Zenius -I- vanisher data. The database keeps the original Aurcade-compatible
 schema while using sidecar tables for provenance, status curation, validation
 links, and canonical game mappings.
 
-## Legacy Flask Reference
+## Legacy Reference
 
 Flask is useful for comparison and local development, but the client/server app
 is deprecated as the product runtime.
@@ -67,6 +67,11 @@ is deprecated as the product runtime.
 Then open <http://127.0.0.1:5000>. The root serves the generated static atlas
 when present. The old Flask route planner remains available at
 <http://127.0.0.1:5000/planner> for reference.
+
+Earlier transitional outputs, including the standalone dashboard, standalone
+DuckDB planner, and separate `static/data/` Parquet bundle, have been folded
+into the one-file atlas. They may be regenerated locally while developing, but
+they are no longer checked-in product artifacts.
 
 ## National Data Curation
 

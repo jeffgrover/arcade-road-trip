@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """Export browser-queryable Arcade Road Trip Parquet snapshots.
 
-The Flask app remains the reference implementation. This script creates a
-read-only static data bundle for the DuckDB-WASM planner prototype.
+These builders are shared by the one-file static atlas generator. Running this
+module directly writes the intermediate Parquet bundle for inspection.
 """
 
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -20,8 +19,6 @@ from us_states import CONTINENTAL_US_STATES
 
 DEFAULT_DB = Path("aurcade_locations.sqlite")
 DEFAULT_OUTPUT_DIR = Path("static/data")
-DEFAULT_PLANNER_TEMPLATE = Path("static/duckdb_planner.html")
-DEFAULT_EMBEDDED_PLANNER = Path("static/duckdb_planner_embedded.html")
 ACTIVE_STATUSES = ("active", "unverified", "uncertain", "matched", "needs_review")
 
 
@@ -199,27 +196,10 @@ def write_parquet(records: list[dict[str, Any]], output_path: Path) -> None:
     pq.write_table(table, output_path, compression="zstd")
 
 
-def write_embedded_planner(template_path: Path, output_path: Path, data_dir: Path) -> None:
-    template = template_path.read_text()
-    embedded = {
-        "route_locations": base64.b64encode((data_dir / "route_locations.parquet").read_bytes()).decode("ascii"),
-        "location_games": base64.b64encode((data_dir / "location_games.parquet").read_bytes()).decode("ascii"),
-        "manifest": json.loads((data_dir / "manifest.json").read_text()),
-    }
-    payload = json.dumps(embedded, ensure_ascii=True, separators=(",", ":"))
-    marker = "const EMBEDDED_PARQUET = null;"
-    if marker not in template:
-        raise SystemExit(f"Could not find embedded-data marker in {template_path}")
-    output_path.write_text(template.replace(marker, f"const EMBEDDED_PARQUET = {payload};"))
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Export static DuckDB-WASM Parquet data.")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument("--planner-template", type=Path, default=DEFAULT_PLANNER_TEMPLATE)
-    parser.add_argument("--embedded-planner", type=Path, default=DEFAULT_EMBEDDED_PLANNER)
-    parser.add_argument("--skip-embedded-planner", action="store_true")
     return parser
 
 
@@ -250,9 +230,6 @@ def main() -> int:
     print(f"wrote {route_path} ({len(route_locations)} locations)")
     print(f"wrote {games_path} ({len(location_games)} game placements)")
     print(f"wrote {args.output_dir / 'manifest.json'}")
-    if not args.skip_embedded_planner:
-        write_embedded_planner(args.planner_template, args.embedded_planner, args.output_dir)
-        print(f"wrote {args.embedded_planner}")
     return 0
 
 

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Generate the static Arcade Road Trip destination dashboard."""
+"""Build Arcade Road Trip destination dashboard data.
+
+The one-file atlas imports these data builders. The standalone HTML writer is
+kept as a development aid, not as a checked-in product artifact.
+"""
 
 from __future__ import annotations
 
@@ -337,7 +341,6 @@ def build_html(data: dict[str, Any]) -> str:
         <a href="#hotspots">Hotspots</a>
         <a class="cta" href="/static/arcade_road_trip.html">Open Atlas</a>
         <a class="cta" href="/planner">Plan a Route</a>
-        <a href="/static/duckdb_planner.html">Static Prototype</a>
       </div>
     </nav>
     <div class="hero">
@@ -421,7 +424,7 @@ def build_html(data: dict[str, Any]) -> str:
       <div class="panel table-wrap"><table id="arcade-table"></table></div>
     </section>
 
-    <p class="footer">Generated from local SQLite data at {generated}. Rare U.S. counts use canonical game mappings and active continental U.S. locations. <a href="/planner">Open the road trip planner</a>.</p>
+    <p class="footer">Generated from local SQLite data at {generated}. Rare U.S. counts use canonical game mappings and active continental U.S. locations.</p>
   </main>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
