@@ -16,10 +16,13 @@ sqlite3 aurcade_locations.sqlite "PRAGMA integrity_check; PRAGMA foreign_key_che
 ## Local Route Prototype
 
 ```bash
+python3 generate_dashboard.py
 python3 arcade_roadtrip_app.py
 ```
 
-Then open <http://127.0.0.1:5000>.
+Then open <http://127.0.0.1:5000>. The site root serves the generated
+destination dashboard, and the route planner is available at
+<http://127.0.0.1:5000/planner>.
 
 The prototype uses Leaflet/OpenStreetMap tiles, cached Nominatim geocoding for explicit typed searches, and OSRM demo routing for local/light use only.
 

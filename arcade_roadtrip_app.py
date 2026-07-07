@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 
 
 DB_PATH = Path("aurcade_locations.sqlite")
@@ -485,6 +485,14 @@ def plan_stops(route: dict[str, Any], max_detour_miles: float, scope: str, limit
 
 @app.get("/")
 def index() -> str:
+    dashboard_path = Path("static/dashboard.html")
+    if dashboard_path.exists():
+        return send_from_directory("static", "dashboard.html")
+    return INDEX_HTML
+
+
+@app.get("/planner")
+def planner() -> str:
     return INDEX_HTML
 
 

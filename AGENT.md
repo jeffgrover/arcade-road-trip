@@ -19,6 +19,8 @@ This workspace contains the local Arcade Road Trip prototype plus a curated SQLi
 - `curate_us_sources.py`: conservative national source-curation orchestrator.
 - `arcade_query.py`: read-only query CLI intended for Codex/LLM use.
 - `arcade_roadtrip_app.py`: local Flask route-planning prototype for Arcade Road Trip.
+- `generate_dashboard.py`: static destination-dashboard generator. It writes
+  `static/dashboard.html` from the current SQLite snapshot.
 - `verify_locations_osm.py`: OpenStreetMap/Nominatim verification probe that
   records evidence in sidecar tables.
 - `validate_pinballmap_locations.py`: Pinball Map API validation for locations
@@ -96,10 +98,16 @@ Known curated status:
 Run the local prototype with:
 
 ```bash
+python3 generate_dashboard.py
 python3 arcade_roadtrip_app.py
 ```
 
-Then open `http://127.0.0.1:5000`. The app uses Leaflet/OpenStreetMap tiles, cached Nominatim geocoding for explicit typed searches, and OSRM demo routing. Treat these public services as local/light-use prototype dependencies only; keep geocoding cached and avoid autocomplete or bulk requests.
+Then open `http://127.0.0.1:5000`. The site root serves the generated
+destination dashboard, and the route planner is at `http://127.0.0.1:5000/planner`.
+The app uses Leaflet/OpenStreetMap tiles, cached Nominatim geocoding for
+explicit typed searches, and OSRM demo routing. Treat these public services as
+local/light-use prototype dependencies only; keep geocoding cached and avoid
+autocomplete or bulk requests.
 
 ## Querying the Data
 
