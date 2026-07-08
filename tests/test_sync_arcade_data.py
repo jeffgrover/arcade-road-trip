@@ -30,6 +30,8 @@ def args(**overrides):
         "skip_canonicalization": False,
         "skip_validation": False,
         "include_osm_validation": False,
+        "compact_db": False,
+        "skip_db_maintenance": False,
         "skip_build": False,
     }
     defaults.update(overrides)
@@ -41,13 +43,15 @@ class SyncArcadeDataTests(unittest.TestCase):
         steps = build_sync_steps(args(), python="python")
 
         self.assertEqual(
-            ["source-sync", "validation", "validation", "curation", "artifact-build"],
+            ["source-sync", "validation", "validation", "curation", "database-maintenance", "artifact-build"],
             [step.phase for step in steps],
         )
         self.assertEqual("curate source updates", steps[0].name)
         self.assertIn("arcade.duckdb", steps[0].command)
-        self.assertIn("canonicalize_games.py", steps[-2].command)
-        self.assertIn("arcade.duckdb", steps[-2].command)
+        self.assertIn("canonicalize_games.py", steps[-3].command)
+        self.assertIn("arcade.duckdb", steps[-3].command)
+        self.assertIn("maintain_duckdb.py", steps[-2].command)
+        self.assertNotIn("--compact", steps[-2].command)
         self.assertIn("generate_static_app.py", steps[-1].command)
         self.assertNotIn("--apply", steps[0].command)
 
@@ -68,7 +72,21 @@ class SyncArcadeDataTests(unittest.TestCase):
         self.assertIn("--skip-ziv", steps[0].command)
         self.assertTrue(any("validate_pinballmap_locations.py" in command for command in commands))
         self.assertFalse(any("validate_ziv_locations.py" in command for command in commands))
+        self.assertFalse(any("maintain_duckdb.py" in command for command in commands))
         self.assertFalse(any("generate_static_app.py" in command for command in commands))
+
+    def test_can_skip_db_maintenance_before_build(self):
+        steps = build_sync_steps(args(skip_db_maintenance=True), python="python")
+
+        self.assertFalse(any("maintain_duckdb.py" in step.command for step in steps))
+        self.assertTrue(any("generate_static_app.py" in step.command for step in steps))
+
+    def test_can_compact_db_before_build(self):
+        steps = build_sync_steps(args(compact_db=True), python="python")
+        maintenance = next(step for step in steps if step.phase == "database-maintenance")
+
+        self.assertEqual("compact canonical DuckDB", maintenance.name)
+        self.assertIn("--compact", maintenance.command)
 
     def test_osm_validation_is_opt_in(self):
         default_steps = build_sync_steps(args(validation="osm"), python="python")

@@ -356,17 +356,18 @@ def insert_locations(conn: duckdb.DuckDBPyConnection, plan: ImportPlan, checked_
                 """,
                 row,
             )
-    conn.executemany(
-        """
-        INSERT INTO location_verifications (
-            location_id, checked_at, provider, status, match_kind, query,
-            matched_name, matched_address, matched_latitude, matched_longitude,
-            distance_miles, confidence, evidence_url, raw_json, notes
+    if verification_rows:
+        conn.executemany(
+            """
+            INSERT INTO location_verifications (
+                location_id, checked_at, provider, status, match_kind, query,
+                matched_name, matched_address, matched_latitude, matched_longitude,
+                distance_miles, confidence, evidence_url, raw_json, notes
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
+            """,
+            verification_rows,
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
-        """,
-        verification_rows,
-    )
 
 
 def print_plan(plan: ImportPlan, state: str) -> None:

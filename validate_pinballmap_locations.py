@@ -266,7 +266,10 @@ def record_validation(
                     confidence = ?,
                     verified_at = ?,
                     evidence = 'pinballmap',
-                    notes = ?
+                    notes = CASE
+                        WHEN evidence IS NULL OR evidence = 'pinballmap' THEN ?
+                        ELSE notes
+                    END
                 WHERE location_id = ?
                 """,
                 (confidence, checked_at, notes, location_id),

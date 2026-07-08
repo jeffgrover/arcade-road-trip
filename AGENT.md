@@ -34,6 +34,8 @@ Public GitHub Pages URL:
 - `canonicalize_games.py`: conservative game-title canonicalization pass that
   writes source-specific duplicate mappings to a sidecar table.
 - `curate_us_sources.py`: conservative national source-curation orchestrator.
+- `maintain_duckdb.py`: checkpoint helper used before static export; can also
+  compact the database with `--compact` after deletes/removals.
 - `generate_dashboard.py`: destination-dashboard data builder used by the
   one-file atlas. Its standalone HTML output is historical/development-only.
 - `export_static_data.py`: shared Parquet snapshot builder used by the one-file
@@ -116,6 +118,8 @@ Useful scoped runs:
 .venv/bin/python sync_arcade_data.py --source pinballmap --state CO
 .venv/bin/python sync_arcade_data.py --source ziv --states CO,NV,AZ
 .venv/bin/python sync_arcade_data.py --all-continental-us --skip-build
+.venv/bin/python sync_arcade_data.py --compact-db
+.venv/bin/python sync_arcade_data.py --skip-db-maintenance
 .venv/bin/python sync_arcade_data.py --include-osm-validation --osm-limit 10
 ```
 
@@ -150,7 +154,7 @@ Run these after code or database changes:
 
 ```bash
 .venv/bin/python -m unittest discover -s tests
-.venv/bin/python -m py_compile arcade_db.py arcade_query.py canonicalize_games.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scrape_aurcade_locations.py curate_us_sources.py us_states.py sync_arcade_data.py generate_static_app.py export_static_data.py generate_dashboard.py
+.venv/bin/python -m py_compile arcade_db.py arcade_query.py canonicalize_games.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scrape_aurcade_locations.py curate_us_sources.py us_states.py sync_arcade_data.py maintain_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
 .venv/bin/python arcade_query.py summary
 ```
 

@@ -181,6 +181,24 @@ def build_sync_steps(args: argparse.Namespace, python: str = sys.executable) -> 
             )
         )
 
+    if not args.skip_build and not args.skip_db_maintenance:
+        maintenance_command = [
+            python,
+            "maintain_duckdb.py",
+            "--db",
+            str(args.duckdb),
+        ]
+        if args.compact_db:
+            maintenance_command.append("--compact")
+        steps.append(
+            SyncStep(
+                phase="database-maintenance",
+                name="compact canonical DuckDB" if args.compact_db else "checkpoint canonical DuckDB",
+                command=tuple(maintenance_command),
+                mutates=True,
+            )
+        )
+
     if not args.skip_build:
         steps.append(
             SyncStep(
@@ -236,6 +254,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-canonicalization", action="store_true")
     parser.add_argument("--skip-validation", action="store_true")
     parser.add_argument("--include-osm-validation", action="store_true", help="Include rate-limited Nominatim validation.")
+    parser.add_argument("--compact-db", action="store_true", help="Rewrite DuckDB through COPY FROM DATABASE before static export. Useful after deletes/removals.")
+    parser.add_argument("--skip-db-maintenance", action="store_true", help="Skip DuckDB checkpoint/compaction before static export.")
     parser.add_argument("--skip-build", action="store_true")
     return parser
 

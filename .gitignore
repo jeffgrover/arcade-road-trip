@@ -14,6 +14,7 @@ static/duckdb_planner*.html
 static/data/
 *.backup*.duckdb
 *.baseline*.duckdb
+*.pre_sync_*.duckdb
 backups/
 *.db-journal
 rare_games_*.md
