@@ -1,3 +1,2 @@
-Flask==3.0.2
 duckdb==1.5.4
 pyarrow==16.1.0

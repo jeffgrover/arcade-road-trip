@@ -5,9 +5,8 @@ rare machines, and playable stops along a road trip.
 
 The current product direction is **one static artifact**: the user-facing app is
 `static/arcade_road_trip.html`, a single generated HTML file with embedded
-Parquet data queried in the browser by DuckDB-WASM. The old Flask client/server
-prototype is retained only as a legacy reference and convenient local static
-server; it is no longer the product runtime.
+Parquet data queried in the browser by DuckDB-WASM. There is no client/server
+runtime in the product path.
 
 Published app:
 
@@ -84,37 +83,30 @@ one deployable HTML artifact:
 
 - `arcade_roadtrip.duckdb`: canonical working database for static generation.
 - `sync_arcade_data.py`: operations wrapper for source sync, validation,
-  curation, optional legacy bootstrap, and static artifact generation.
+  curation, and static artifact generation.
 - `arcade_db.py`: shared DuckDB connection/query helpers for pipeline scripts.
-- `migrate_sqlite_to_duckdb.py`: optional bootstrap from the legacy SQLite
-  snapshot.
-- `aurcade_locations.sqlite`: legacy SQLite source snapshot retained for
-  bootstrap/reference only.
 - `arcade_query.py`: read-only DuckDB CLI for analysis.
 - `curate_us_sources.py`: national source-enrichment orchestrator.
 - `export_static_data.py`: shared Parquet snapshot builders used by the atlas.
 - `generate_dashboard.py`: shared destination-summary builder used by the atlas.
 - `generate_static_app.py`: primary generator for `static/arcade_road_trip.html`.
-- `arcade_roadtrip_app.py`: legacy Flask reference/local static server.
 
 This repository grew out of an Aurcade scrape, then merged in Pinball Map and
 Zenius -I- vanisher data. The database keeps the original Aurcade-compatible
 schema while using sidecar tables for provenance, status curation, validation
 links, and canonical game mappings.
 
-## Legacy Reference
+## Static Serving
 
-Flask is useful for comparison and local development, but the client/server app
-is deprecated as the product runtime.
+The generated atlas can be opened directly from the filesystem, published by
+GitHub Pages, or served by any static web server:
 
 ```bash
 .venv/bin/python generate_static_app.py
-.venv/bin/python arcade_roadtrip_app.py
+python3 -m http.server 8000
 ```
 
-Then open <http://127.0.0.1:5000>. The root serves the generated static atlas
-when present. The old Flask route planner remains available at
-<http://127.0.0.1:5000/planner> for reference.
+Then open <http://127.0.0.1:8000/static/arcade_road_trip.html>.
 
 Earlier transitional outputs, including the standalone dashboard, standalone
 DuckDB planner, and separate `static/data/` Parquet bundle, have been folded
@@ -142,8 +134,9 @@ sessions, so run validation through `sync_arcade_data.py` instead.
 ```
 
 Pinball Map national ingestion is DuckDB-native and uses the public API with
-cached, rate-limited region calls. The CSV importer is still available for
-privileged/admin exports, but it is not the national path.
+cached, rate-limited region calls. The CSV importer still accepts local
+privileged/admin exports, but those snapshots are not checked in and are not
+the national path.
 
 The Aurcade browser scrape is also DuckDB-native, but remains explicit because
 it is slow and network-heavy:
@@ -158,9 +151,8 @@ it is slow and network-heavy:
 ```bash
 .venv/bin/python arcade_query.py summary
 .venv/bin/python sync_arcade_data.py --plan-only
-.venv/bin/python sync_arcade_data.py --plan-only --refresh-from-sqlite
 .venv/bin/python generate_static_app.py
 .venv/bin/python -m unittest discover -s tests
-.venv/bin/python -m py_compile arcade_db.py arcade_query.py canonicalize_games.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scrape_aurcade_locations.py arcade_roadtrip_app.py curate_us_sources.py us_states.py sync_arcade_data.py migrate_sqlite_to_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
+.venv/bin/python -m py_compile arcade_db.py arcade_query.py canonicalize_games.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scrape_aurcade_locations.py curate_us_sources.py us_states.py sync_arcade_data.py generate_static_app.py export_static_data.py generate_dashboard.py
 .venv/bin/python arcade_query.py sql "SELECT COUNT(*) AS locations FROM locations"
 ```

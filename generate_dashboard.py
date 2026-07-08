@@ -352,7 +352,7 @@ def build_html(data: dict[str, Any]) -> str:
         <a href="#cities">Destinations</a>
         <a href="#hotspots">Hotspots</a>
         <a class="cta" href="/static/arcade_road_trip.html">Open Atlas</a>
-        <a class="cta" href="/planner">Plan a Route</a>
+        <a class="cta" href="/static/arcade_road_trip.html">Plan a Route</a>
       </div>
     </nav>
     <div class="hero">

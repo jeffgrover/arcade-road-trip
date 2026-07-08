@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-DEFAULT_LEGACY_SQLITE_DB = Path("aurcade_locations.sqlite")
 DEFAULT_DUCKDB = Path("arcade_roadtrip.duckdb")
 DEFAULT_REPORT_DIR = Path("reports")
 
@@ -165,24 +164,6 @@ def build_sync_steps(args: argparse.Namespace, python: str = sys.executable) -> 
                 )
             )
 
-    if args.refresh_from_sqlite and not args.skip_migration:
-        steps.append(
-            SyncStep(
-                phase="database-bootstrap",
-                name="refresh canonical DuckDB from legacy SQLite",
-                command=(
-                    python,
-                    "migrate_sqlite_to_duckdb.py",
-                    "--sqlite",
-                    str(args.legacy_sqlite_db),
-                    "--duckdb",
-                    str(args.duckdb),
-                    "--replace",
-                ),
-                mutates=True,
-            )
-        )
-
     if not args.skip_canonicalization and args.source in ("all", "pinballmap", "ziv", "aurcade"):
         steps.append(
             SyncStep(
@@ -232,7 +213,6 @@ def run_steps(steps: list[SyncStep], dry_run: bool) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Sync source arcade data into DuckDB and rebuild the static atlas.")
-    parser.add_argument("--legacy-sqlite-db", type=Path, default=DEFAULT_LEGACY_SQLITE_DB)
     parser.add_argument("--duckdb", type=Path, default=DEFAULT_DUCKDB)
     parser.add_argument("--report-dir", type=Path, default=DEFAULT_REPORT_DIR)
     parser.add_argument("--output", type=Path, default=Path("static/arcade_road_trip.html"))
@@ -256,8 +236,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-canonicalization", action="store_true")
     parser.add_argument("--skip-validation", action="store_true")
     parser.add_argument("--include-osm-validation", action="store_true", help="Include rate-limited Nominatim validation.")
-    parser.add_argument("--refresh-from-sqlite", action="store_true", help="Bootstrap DuckDB from the legacy SQLite snapshot before curation/build.")
-    parser.add_argument("--skip-migration", action="store_true", help="Deprecated alias for suppressing --refresh-from-sqlite.")
     parser.add_argument("--skip-build", action="store_true")
     return parser
 

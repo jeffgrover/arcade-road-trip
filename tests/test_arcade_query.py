@@ -17,8 +17,8 @@ from arcade_query import (
 class ArcadeQueryTests(unittest.TestCase):
     def test_normalize_argv_moves_global_flags_before_subcommand(self):
         self.assertEqual(
-            normalize_argv(["games", "Godzilla", "--format", "json", "--db", "arcades.sqlite"]),
-            ["--format", "json", "--db", "arcades.sqlite", "games", "Godzilla"],
+            normalize_argv(["games", "Godzilla", "--format", "json", "--db", "arcades.duckdb"]),
+            ["--format", "json", "--db", "arcades.duckdb", "games", "Godzilla"],
         )
 
     def test_normalize_argv_moves_global_boolean_flags(self):
