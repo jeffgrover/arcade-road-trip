@@ -178,13 +178,16 @@ requests:
 ```
 
 Owner website roster validation is a separate research workflow. The first
-pass reports large active arcades with website URLs, and can optionally make
-one polite homepage request per site to look for likely game-list, machine,
-collection, or lineup links. It does not modify curated machine placements:
+pass reports large active arcades with website URLs. Optional slow-and-low
+flags can probe homepages, follow likely internal roster links, extract
+candidate machine names, and compare those names with the current database.
+It does not modify curated machine placements:
 
 ```bash
 .venv/bin/python scan_arcade_web_rosters.py --limit 25
 .venv/bin/python scan_arcade_web_rosters.py --limit 5 --probe --delay-seconds 10
+.venv/bin/python scan_arcade_web_rosters.py --limit 3 --discover-pages --delay-seconds 10
+.venv/bin/python scan_arcade_web_rosters.py --limit 3 --compare --delay-seconds 10
 ```
 
 ## Quick Checks

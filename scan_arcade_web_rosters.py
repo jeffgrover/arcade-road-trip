@@ -17,6 +17,7 @@ import re
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,8 @@ DEFAULT_LIMIT = 25
 DEFAULT_MIN_GAME_COUNT = 50
 DEFAULT_TIMEOUT_SECONDS = 20
 DEFAULT_MAX_BYTES = 1_500_000
+DEFAULT_MAX_ROSTER_PAGES = 3
+MAX_EXTRACTED_NAMES_PER_PAGE = 1_500
 ROSTER_KEYWORD_WEIGHTS = {
     "arcade games": 3,
     "cabinet": 2,
@@ -90,6 +93,19 @@ class LinkHint:
 
 
 @dataclass(frozen=True)
+class PageFetchResult:
+    ok: bool
+    final_url: str
+    status_code: int | None
+    content_type: str
+    title: str
+    links: list[tuple[str, str]]
+    text: str
+    cache_path: str
+    error: str
+
+
+@dataclass(frozen=True)
 class ProbeResult:
     ok: bool
     final_url: str
@@ -102,44 +118,93 @@ class ProbeResult:
     error: str
 
 
+@dataclass(frozen=True)
+class RosterPageResult:
+    source_text: str
+    source_url: str
+    source_score: int
+    ok: bool
+    final_url: str
+    status_code: int | None
+    content_type: str
+    title: str
+    roster_score: int
+    extracted_names: list[str]
+    cache_path: str
+    error: str
+
+
+@dataclass(frozen=True)
+class RosterComparison:
+    db_game_count: int
+    roster_page_count: int
+    matched_db_games: list[str]
+    missing_db_games: list[str]
+    website_only_names: list[str]
+
+
 class PageSummaryParser(HTMLParser):
     def __init__(self, base_url: str) -> None:
         super().__init__(convert_charrefs=True)
         self.base_url = base_url
         self.title_parts: list[str] = []
         self.links: list[tuple[str, str]] = []
+        self.text_parts: list[str] = []
         self._in_title = False
         self._current_href: str | None = None
         self._current_text: list[str] = []
+        self._skip_depth = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        normalized_tag = tag.lower()
+        if normalized_tag in {"script", "style", "noscript", "svg"}:
+            self._skip_depth += 1
+            return
         attrs_by_name = {name.lower(): value for name, value in attrs}
-        if tag.lower() == "title":
+        if normalized_tag == "title":
             self._in_title = True
-        if tag.lower() == "a":
+        if normalized_tag == "a":
             href = attrs_by_name.get("href")
             self._current_href = urljoin(self.base_url, href) if href else None
             self._current_text = []
+        if normalized_tag in {"br", "div", "li", "p", "td", "th", "tr", "h1", "h2", "h3", "h4", "h5", "h6"}:
+            self.text_parts.append("\n")
 
     def handle_endtag(self, tag: str) -> None:
-        if tag.lower() == "title":
+        normalized_tag = tag.lower()
+        if normalized_tag in {"script", "style", "noscript", "svg"} and self._skip_depth:
+            self._skip_depth -= 1
+            return
+        if normalized_tag == "title":
             self._in_title = False
-        if tag.lower() == "a" and self._current_href:
+        if normalized_tag == "a" and self._current_href:
             text = normalize_space(" ".join(self._current_text))
             if text:
                 self.links.append((text, self._current_href))
             self._current_href = None
             self._current_text = []
+        if normalized_tag in {"div", "li", "p", "td", "th", "tr", "h1", "h2", "h3", "h4", "h5", "h6"}:
+            self.text_parts.append("\n")
 
     def handle_data(self, data: str) -> None:
+        if self._skip_depth:
+            return
         if self._in_title:
             self.title_parts.append(data)
         if self._current_href:
             self._current_text.append(data)
+        text = normalize_space(data)
+        if text:
+            self.text_parts.append(text + " ")
 
     @property
     def title(self) -> str:
         return normalize_space(" ".join(self.title_parts))
+
+    @property
+    def text(self) -> str:
+        lines = [normalize_space(line) for line in "".join(self.text_parts).splitlines()]
+        return "\n".join(line for line in lines if line)
 
 
 def normalize_space(value: str) -> str:
@@ -153,6 +218,15 @@ def normalize_url(url: str) -> str:
     if not re.match(r"^https?://", value, flags=re.I):
         value = f"https://{value}"
     return value
+
+
+def normalized_host(url: str) -> str:
+    host = urlparse(normalize_url(url)).netloc.lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def is_internal_url(base_url: str, target_url: str) -> bool:
+    return normalized_host(base_url) == normalized_host(target_url)
 
 
 def has_locations_column(conn: duckdb.DuckDBPyConnection, column_name: str) -> bool:
@@ -254,17 +328,90 @@ def score_links(links: list[tuple[str, str]], limit: int = 10) -> list[LinkHint]
     return sorted(hints, key=lambda hint: (-hint.score, hint.text.lower()))[:limit]
 
 
+def normalize_game_name(value: str) -> str:
+    normalized = html.unescape(value).lower()
+    normalized = re.sub(r"\([^)]*\)", " ", normalized)
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    return normalize_space(normalized)
+
+
+def title_in_text(title: str, normalized_text: str) -> bool:
+    normalized_title = normalize_game_name(title)
+    if len(normalized_title) < 4:
+        return False
+    return f" {normalized_title} " in f" {normalized_text} "
+
+
+def likely_same_game(left: str, right: str) -> bool:
+    left_norm = normalize_game_name(left)
+    right_norm = normalize_game_name(right)
+    if not left_norm or not right_norm:
+        return False
+    if left_norm == right_norm:
+        return True
+    if len(left_norm) >= 5 and f" {left_norm} " in f" {right_norm} ":
+        return True
+    if len(right_norm) >= 5 and f" {right_norm} " in f" {left_norm} ":
+        return True
+    return SequenceMatcher(None, left_norm, right_norm).ratio() >= 0.88
+
+
+def extract_machine_name_candidates(text: str, limit: int = 200) -> list[str]:
+    reject_patterns = re.compile(
+        r"(admission|birthday|calendar|contact|directions|email|facebook|food|footer|"
+        r"hours?|instagram|login|membership|menu|newsletter|party|phone|privacy|restaurant|"
+        r"subscribe|ticket|tiktok|toggle navigation|twitter|video walk.?through|youtube|www\.|https?://)",
+        flags=re.I,
+    )
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for raw_line in text.splitlines():
+        line = normalize_space(raw_line)
+        line = re.sub(r"^\s*[-*\u2022]\s+", "", line)
+        line = re.sub(r"^\s*\d+[\.)]\s+", "", line)
+        line = re.sub(r"\s+(?:\(?(?:working|down|needs repair|out of order|coming soon|sold)\)?)$", "", line, flags=re.I)
+        line = line.strip(" :-\u2013\u2014|")
+        if not line or len(line) < 3 or len(line) > 80:
+            continue
+        if re.search(r"\b\d{1,2}\s*(?:am|pm)\b", line, flags=re.I):
+            continue
+        if re.search(r"\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b", line):
+            continue
+        if re.search(r"\d", line) and re.search(r"\b(ave|avenue|blvd|boulevard|dr|drive|rd|road|st|street)\.?\b", line, flags=re.I):
+            continue
+        if re.search(r"\b\d+\s+days\s+a\s+year\b", line, flags=re.I):
+            continue
+        if line.lower() in {"games", "game list", "games list", "home"}:
+            continue
+        if line.lower().startswith(("about ", "current games", "games list")):
+            continue
+        if reject_patterns.search(line):
+            continue
+        if not re.search(r"[A-Za-z]", line) and not re.fullmatch(r"\d{3,4}", line):
+            continue
+        if len(line.split()) > 9:
+            continue
+        key = normalize_game_name(line)
+        if len(key) < 3 or key in seen:
+            continue
+        seen.add(key)
+        candidates.append(line)
+        if len(candidates) >= limit:
+            break
+    return candidates
+
+
 def cache_file_for_url(cache_dir: Path, url: str) -> Path:
     digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:24]
     return cache_dir / f"{digest}.html"
 
 
-def probe_homepage(candidate: Candidate, cache_dir: Path, timeout_seconds: int, max_bytes: int) -> ProbeResult:
-    url = normalize_url(candidate.website_url)
+def fetch_page(url: str, cache_dir: Path, timeout_seconds: int, max_bytes: int) -> PageFetchResult:
+    normalized_url = normalize_url(url)
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_file_for_url(cache_dir, url)
+    cache_path = cache_file_for_url(cache_dir, normalized_url)
     request = Request(
-        url,
+        normalized_url,
         headers={
             "User-Agent": "ArcadeRoadTripRosterReporter/0.1 (+https://github.com/jeffgrover/arcade-road-trip)",
             "Accept": "text/html,application/xhtml+xml,text/plain;q=0.8,*/*;q=0.5",
@@ -277,9 +424,9 @@ def probe_homepage(candidate: Candidate, cache_dir: Path, timeout_seconds: int, 
             status_code = getattr(response, "status", None)
             content_type = response.headers.get("content-type", "")
     except HTTPError as exc:
-        return ProbeResult(False, url, exc.code, "", "", 0, [], "", f"HTTP {exc.code}: {exc.reason}")
+        return PageFetchResult(False, normalized_url, exc.code, "", "", [], "", "", f"HTTP {exc.code}: {exc.reason}")
     except (URLError, TimeoutError, OSError) as exc:
-        return ProbeResult(False, url, None, "", "", 0, [], "", str(exc))
+        return PageFetchResult(False, normalized_url, None, "", "", [], "", "", str(exc))
 
     cache_path.write_bytes(body)
     charset_match = re.search(r"charset=([^;]+)", content_type, flags=re.I)
@@ -287,12 +434,151 @@ def probe_homepage(candidate: Candidate, cache_dir: Path, timeout_seconds: int, 
     text = body.decode(charset, errors="replace")
     parser = PageSummaryParser(final_url)
     parser.feed(text)
-    link_hints = score_links(parser.links)
-    roster_score = keyword_score(parser.title) + sum(hint.score for hint in link_hints)
-    return ProbeResult(True, final_url, status_code, content_type, parser.title, roster_score, link_hints, str(cache_path), "")
+    return PageFetchResult(True, final_url, status_code, content_type, parser.title, parser.links, parser.text, str(cache_path), "")
 
 
-def markdown_report(candidates: list[Candidate], probes: dict[int, ProbeResult], generated_at: str) -> str:
+def probe_homepage(candidate: Candidate, cache_dir: Path, timeout_seconds: int, max_bytes: int) -> ProbeResult:
+    fetched = fetch_page(candidate.website_url, cache_dir, timeout_seconds, max_bytes)
+    if not fetched.ok:
+        return ProbeResult(
+            fetched.ok,
+            fetched.final_url,
+            fetched.status_code,
+            fetched.content_type,
+            fetched.title,
+            0,
+            [],
+            fetched.cache_path,
+            fetched.error,
+        )
+    link_hints = score_links(fetched.links)
+    roster_score = keyword_score(fetched.title) + sum(hint.score for hint in link_hints)
+    return ProbeResult(
+        fetched.ok,
+        fetched.final_url,
+        fetched.status_code,
+        fetched.content_type,
+        fetched.title,
+        roster_score,
+        link_hints,
+        fetched.cache_path,
+        fetched.error,
+    )
+
+
+def discover_roster_pages(
+    probe: ProbeResult,
+    cache_dir: Path,
+    timeout_seconds: int,
+    max_bytes: int,
+    max_pages: int,
+    delay_seconds: float,
+) -> list[RosterPageResult]:
+    if not probe.ok:
+        return []
+    pages: list[RosterPageResult] = []
+    seen_urls: set[str] = {probe.final_url.rstrip("/")}
+    for hint in probe.link_hints:
+        if len(pages) >= max_pages:
+            break
+        if not is_internal_url(probe.final_url, hint.url):
+            continue
+        signature = hint.url.rstrip("/")
+        if signature in seen_urls:
+            continue
+        seen_urls.add(signature)
+        if delay_seconds > 0:
+            print(f"sleeping {delay_seconds:.1f}s before roster-page request")
+            time.sleep(delay_seconds)
+        print(f"probing roster page hint: {hint.text} -> {hint.url}")
+        fetched = fetch_page(hint.url, cache_dir, timeout_seconds, max_bytes)
+        if fetched.ok:
+            extracted = extract_machine_name_candidates(fetched.text, limit=MAX_EXTRACTED_NAMES_PER_PAGE)
+            roster_score = keyword_score(fetched.title) + keyword_score(fetched.text[:5000])
+        else:
+            extracted = []
+            roster_score = 0
+        pages.append(
+            RosterPageResult(
+                source_text=hint.text,
+                source_url=hint.url,
+                source_score=hint.score,
+                ok=fetched.ok,
+                final_url=fetched.final_url,
+                status_code=fetched.status_code,
+                content_type=fetched.content_type,
+                title=fetched.title,
+                roster_score=roster_score,
+                extracted_names=extracted[:MAX_EXTRACTED_NAMES_PER_PAGE],
+                cache_path=fetched.cache_path,
+                error=fetched.error,
+            )
+        )
+    return pages
+
+
+def load_location_game_names(conn: duckdb.DuckDBPyConnection, location_ids: list[int]) -> dict[int, list[str]]:
+    if not location_ids:
+        return {}
+    sql = f"""
+        SELECT lg.location_id, g.name
+        FROM location_games lg
+        JOIN games g ON g.game_id = lg.game_id
+        WHERE lg.location_id IN ({placeholders(location_ids)})
+        ORDER BY lg.location_id, g.name
+    """
+    result: dict[int, list[str]] = {location_id: [] for location_id in location_ids}
+    for row in rows(conn, sql, location_ids):
+        result.setdefault(row["location_id"], []).append(row["name"])
+    return result
+
+
+def compare_roster_to_database(db_game_names: list[str], pages: list[RosterPageResult]) -> RosterComparison:
+    if not any(page.ok for page in pages):
+        return RosterComparison(
+            db_game_count=len(db_game_names),
+            roster_page_count=0,
+            matched_db_games=[],
+            missing_db_games=[],
+            website_only_names=[],
+        )
+    page_text = "\n".join(page.title + "\n" + "\n".join(page.extracted_names) for page in pages if page.ok)
+    normalized_text = normalize_game_name(page_text)
+    extracted_names: list[str] = []
+    seen: set[str] = set()
+    for page in pages:
+        for name in page.extracted_names:
+            key = normalize_game_name(name)
+            if key and key not in seen:
+                seen.add(key)
+                extracted_names.append(name)
+    matched = [
+        name
+        for name in db_game_names
+        if title_in_text(name, normalized_text) or any(likely_same_game(name, roster_name) for roster_name in extracted_names)
+    ]
+    missing = [name for name in db_game_names if name not in set(matched)]
+    website_only = [
+        name
+        for name in extracted_names
+        if not any(likely_same_game(name, db_name) for db_name in db_game_names)
+    ]
+    return RosterComparison(
+        db_game_count=len(db_game_names),
+        roster_page_count=sum(1 for page in pages if page.ok),
+        matched_db_games=matched,
+        missing_db_games=missing,
+        website_only_names=website_only,
+    )
+
+
+def markdown_report(
+    candidates: list[Candidate],
+    probes: dict[int, ProbeResult],
+    roster_pages: dict[int, list[RosterPageResult]],
+    comparisons: dict[int, RosterComparison],
+    generated_at: str,
+) -> str:
     lines = [
         "# Arcade Website Roster Candidates",
         "",
@@ -313,9 +599,14 @@ def markdown_report(candidates: list[Candidate], probes: dict[int, ProbeResult],
             hints_text = ""
         else:
             probe_text = f"score {probe.roster_score}"
-            hints_text = "<br>".join(
-                f"{html.escape(hint.text)} ({hint.score})" for hint in probe.link_hints[:4]
-            )
+            hints = [f"{html.escape(hint.text)} ({hint.score})" for hint in probe.link_hints[:4]]
+            pages = roster_pages.get(candidate.location_id, [])
+            if pages:
+                hints.extend(
+                    f"page: {html.escape(page.source_text)} ({len(page.extracted_names)} names)"
+                    for page in pages[:3]
+                )
+            hints_text = "<br>".join(hints)
         location = ", ".join(part for part in (candidate.city, candidate.state) if part)
         lines.append(
             "| "
@@ -331,24 +622,92 @@ def markdown_report(candidates: list[Candidate], probes: dict[int, ProbeResult],
             )
             + " |"
         )
+        comparison = comparisons.get(candidate.location_id)
+        if comparison:
+            validation_text = (
+                "no roster pages read"
+                if comparison.roster_page_count == 0
+                else f"{len(comparison.matched_db_games)}/{comparison.db_game_count} DB names seen; "
+                f"{len(comparison.website_only_names)} website-only candidates"
+            )
+            lines.append(
+                f"|  |  |  |  | validation | "
+                f"{validation_text} |"
+            )
     lines.append("")
     lines.append("Probe scores are only triage hints. Treat missing or low-scoring links as unknown, not evidence that a roster does not exist.")
+    if roster_pages:
+        lines.extend(["", "## Discovered Roster Pages", ""])
+        for candidate in candidates:
+            pages = roster_pages.get(candidate.location_id, [])
+            if not pages:
+                continue
+            lines.append(f"### {candidate.name}")
+            for page in pages:
+                if page.ok:
+                    lines.append(
+                        f"- [{html.escape(page.source_text)}]({page.final_url}) "
+                        f"score={page.roster_score} extracted_names={len(page.extracted_names)}"
+                    )
+                    if page.extracted_names:
+                        preview = ", ".join(html.escape(name) for name in page.extracted_names[:10])
+                        lines.append(f"  - sample: {preview}")
+                else:
+                    lines.append(f"- {html.escape(page.source_text)} failed: {html.escape(page.error)}")
+            lines.append("")
+    if comparisons:
+        lines.extend(["", "## Validation Preview", ""])
+        for candidate in candidates:
+            comparison = comparisons.get(candidate.location_id)
+            if not comparison:
+                continue
+            lines.append(f"### {candidate.name}")
+            if comparison.roster_page_count == 0:
+                lines.append(
+                    f"- DB games: {comparison.db_game_count}; roster pages read: 0; "
+                    "no DB mismatch conclusions."
+                )
+                lines.append("")
+                continue
+            lines.append(
+                f"- DB games: {comparison.db_game_count}; roster pages read: {comparison.roster_page_count}; "
+                f"DB games seen on website: {len(comparison.matched_db_games)}"
+            )
+            if comparison.missing_db_games:
+                lines.append("- DB games not seen on website sample: " + ", ".join(html.escape(name) for name in comparison.missing_db_games[:20]))
+            if comparison.website_only_names:
+                lines.append("- Website-only candidate sample: " + ", ".join(html.escape(name) for name in comparison.website_only_names[:20]))
+            lines.append("")
     return "\n".join(lines) + "\n"
 
 
-def write_reports(candidates: list[Candidate], probes: dict[int, ProbeResult], report_dir: Path) -> tuple[Path, Path]:
+def write_reports(
+    candidates: list[Candidate],
+    probes: dict[int, ProbeResult],
+    roster_pages: dict[int, list[RosterPageResult]],
+    comparisons: dict[int, RosterComparison],
+    report_dir: Path,
+) -> tuple[Path, Path]:
     report_dir.mkdir(parents=True, exist_ok=True)
     generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     md_path = report_dir / f"web_roster_candidates_{stamp}.md"
     json_path = report_dir / f"web_roster_candidates_{stamp}.json"
-    md_path.write_text(markdown_report(candidates, probes, generated_at), encoding="utf-8")
+    md_path.write_text(markdown_report(candidates, probes, roster_pages, comparisons, generated_at), encoding="utf-8")
     json_path.write_text(
         json.dumps(
             {
                 "generated_at": generated_at,
                 "candidates": [asdict(candidate) for candidate in candidates],
                 "probes": {str(location_id): asdict(probe) for location_id, probe in probes.items()},
+                "roster_pages": {
+                    str(location_id): [asdict(page) for page in pages]
+                    for location_id, pages in roster_pages.items()
+                },
+                "comparisons": {
+                    str(location_id): asdict(comparison)
+                    for location_id, comparison in comparisons.items()
+                },
             },
             indent=2,
             ensure_ascii=True,
@@ -369,6 +728,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--state", help="Limit candidates to a state abbreviation.")
     parser.add_argument("--location-id", type=int, action="append", default=[])
     parser.add_argument("--probe", action="store_true", help="Fetch each candidate homepage once and score likely roster links.")
+    parser.add_argument("--discover-pages", action="store_true", help="Fetch high-scoring internal roster-page links from probed homepages.")
+    parser.add_argument("--max-roster-pages", type=int, default=DEFAULT_MAX_ROSTER_PAGES)
+    parser.add_argument("--compare", action="store_true", help="Compare discovered roster-page text against current DB machine names.")
     parser.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES)
     parser.add_argument("--delay-seconds", type=float, default=3.0)
@@ -386,11 +748,19 @@ def main() -> int:
             state=args.state,
             location_ids=args.location_id,
         )
+        game_names_by_location = (
+            load_location_game_names(conn, [candidate.location_id for candidate in candidates])
+            if args.compare
+            else {}
+        )
     finally:
         conn.close()
 
     probes: dict[int, ProbeResult] = {}
-    if args.probe:
+    roster_pages: dict[int, list[RosterPageResult]] = {}
+    should_probe = args.probe or args.discover_pages or args.compare
+    should_discover = args.discover_pages or args.compare
+    if should_probe:
         for index, candidate in enumerate(candidates, start=1):
             if index > 1 and args.delay_seconds > 0:
                 print(f"sleeping {args.delay_seconds:.1f}s before next website request")
@@ -402,11 +772,31 @@ def main() -> int:
                 args.timeout_seconds,
                 args.max_bytes,
             )
+            if should_discover:
+                roster_pages[candidate.location_id] = discover_roster_pages(
+                    probes[candidate.location_id],
+                    args.cache_dir,
+                    args.timeout_seconds,
+                    args.max_bytes,
+                    args.max_roster_pages,
+                    args.delay_seconds,
+                )
 
-    md_path, json_path = write_reports(candidates, probes, args.report_dir)
+    comparisons: dict[int, RosterComparison] = {}
+    if args.compare:
+        for candidate in candidates:
+            comparisons[candidate.location_id] = compare_roster_to_database(
+                game_names_by_location.get(candidate.location_id, []),
+                roster_pages.get(candidate.location_id, []),
+            )
+
+    md_path, json_path = write_reports(candidates, probes, roster_pages, comparisons, args.report_dir)
     print(f"wrote {md_path}")
     print(f"wrote {json_path}")
-    print(f"candidates={len(candidates)} probed={len(probes)}")
+    print(
+        f"candidates={len(candidates)} probed={len(probes)} "
+        f"roster_page_groups={len(roster_pages)} compared={len(comparisons)}"
+    )
     return 0
 
 

@@ -17,6 +17,7 @@ static/data/
 *.pre_sync_*.duckdb
 backups/
 *.db-journal
+*.duckdb.wal
 rare_games_*.md
 rare_pinball_games_*.md
 .DS_Store

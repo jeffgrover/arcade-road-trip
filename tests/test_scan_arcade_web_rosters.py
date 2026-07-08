@@ -4,7 +4,12 @@ import duckdb
 
 from scan_arcade_web_rosters import (
     PageSummaryParser,
+    RosterPageResult,
+    compare_roster_to_database,
+    extract_machine_name_candidates,
+    is_internal_url,
     load_candidates,
+    load_location_game_names,
     normalize_url,
     score_links,
 )
@@ -51,6 +56,59 @@ class WebRosterReporterTests(unittest.TestCase):
 
         self.assertEqual(parser.title, "Example Arcade")
         self.assertEqual(parser.links, [("Current games", "https://example.test/games")])
+        self.assertIn("Current games", parser.text)
+
+    def test_is_internal_url_normalizes_www_prefix(self):
+        self.assertTrue(is_internal_url("https://www.example.test", "https://example.test/games"))
+        self.assertFalse(is_internal_url("https://example.test", "https://elsewhere.test/games"))
+
+    def test_extract_machine_name_candidates_filters_page_chrome(self):
+        names = extract_machine_name_candidates(
+            """
+            Hours and Admission
+            Medieval Madness
+            The Addams Family (working)
+            Contact us
+            Attack from Mars - out of order
+            1942
+            1. Galaga
+            https://example.test/games
+            """
+        )
+
+        self.assertEqual(names, ["Medieval Madness", "The Addams Family", "Attack from Mars", "1942", "Galaga"])
+
+    def test_compare_roster_to_database_reports_matches_and_gaps(self):
+        page = RosterPageResult(
+            source_text="Games",
+            source_url="https://example.test/games",
+            source_score=4,
+            ok=True,
+            final_url="https://example.test/games",
+            status_code=200,
+            content_type="text/html",
+            title="Game List",
+            roster_score=8,
+            extracted_names=["Medieval Madness", "Attack from Mars", "Website Only Game"],
+            cache_path="/tmp/example.html",
+            error="",
+        )
+
+        comparison = compare_roster_to_database(
+            ["Medieval Madness", "Attack from Mars", "Missing DB Game"],
+            [page],
+        )
+
+        self.assertEqual(comparison.matched_db_games, ["Medieval Madness", "Attack from Mars"])
+        self.assertEqual(comparison.missing_db_games, ["Missing DB Game"])
+        self.assertEqual(comparison.website_only_names, ["Website Only Game"])
+
+    def test_compare_roster_to_database_does_not_infer_missing_without_pages(self):
+        comparison = compare_roster_to_database(["Medieval Madness"], [])
+
+        self.assertEqual(comparison.db_game_count, 1)
+        self.assertEqual(comparison.roster_page_count, 0)
+        self.assertEqual(comparison.missing_db_games, [])
 
     def test_load_candidates_prefers_large_active_locations_with_websites(self):
         conn = duckdb.connect(":memory:")
@@ -106,6 +164,22 @@ class WebRosterReporterTests(unittest.TestCase):
             self.assertEqual([candidate.location_id for candidate in candidates], [1])
             self.assertEqual(candidates[0].website_url, "big.example")
             self.assertEqual(candidates[0].google_place_id, "PlaceBig")
+        finally:
+            conn.close()
+
+    def test_load_location_game_names_groups_names_by_location(self):
+        conn = duckdb.connect(":memory:")
+        try:
+            conn.execute("CREATE TABLE games(game_id BIGINT, name VARCHAR)")
+            conn.execute("CREATE TABLE location_games(location_id BIGINT, game_id BIGINT)")
+            conn.execute("INSERT INTO games VALUES (10, 'Medieval Madness'), (11, 'Attack from Mars')")
+            conn.execute("INSERT INTO location_games VALUES (1, 10), (1, 11), (2, 10)")
+
+            names = load_location_game_names(conn, [1, 2, 3])
+
+            self.assertEqual(names[1], ["Attack from Mars", "Medieval Madness"])
+            self.assertEqual(names[2], ["Medieval Madness"])
+            self.assertEqual(names[3], [])
         finally:
             conn.close()
 
