@@ -84,7 +84,7 @@ one deployable HTML artifact:
 
 - `arcade_roadtrip.duckdb`: canonical working database for static generation.
 - `sync_arcade_data.py`: operations wrapper for source sync, validation,
-  DuckDB refresh, and static artifact generation.
+  curation, optional legacy bootstrap, and static artifact generation.
 - `arcade_db.py`: shared DuckDB connection/query helpers for pipeline scripts.
 - `migrate_sqlite_to_duckdb.py`: optional bootstrap from the legacy SQLite
   snapshot.
@@ -127,9 +127,9 @@ Use the conservative orchestrator for source enrichment. It is dry-run by
 default and writes review reports under `reports/`:
 
 ```bash
-.venv/bin/python curate_us_sources.py --state CO
-.venv/bin/python curate_us_sources.py --states CO,NV,AZ
-.venv/bin/python curate_us_sources.py --all-continental-us
+.venv/bin/python sync_arcade_data.py --plan-only
+.venv/bin/python sync_arcade_data.py --states CO,NV,AZ --plan-only
+.venv/bin/python sync_arcade_data.py --all-continental-us --plan-only
 ```
 
 The source curation and validation pipeline writes directly to DuckDB. Apply
@@ -138,12 +138,20 @@ mode makes a timestamped DuckDB backup unless `--skip-backup` is passed;
 sessions, so run validation through `sync_arcade_data.py` instead.
 
 ```bash
-.venv/bin/python curate_us_sources.py --all-continental-us --apply
+.venv/bin/python sync_arcade_data.py --all-continental-us --apply
 ```
 
 Pinball Map national ingestion is DuckDB-native and uses the public API with
 cached, rate-limited region calls. The CSV importer is still available for
 privileged/admin exports, but it is not the national path.
+
+The Aurcade browser scrape is also DuckDB-native, but remains explicit because
+it is slow and network-heavy:
+
+```bash
+.venv/bin/python sync_arcade_data.py --source aurcade --aurcade-limit 25 --plan-only
+.venv/bin/python sync_arcade_data.py --include-aurcade-scrape --aurcade-index-only --plan-only
+```
 
 ## Quick Checks
 

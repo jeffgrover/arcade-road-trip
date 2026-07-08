@@ -20,6 +20,11 @@ def args(**overrides):
         "delay_seconds": 1,
         "validation_limit": 100,
         "osm_limit": 25,
+        "include_aurcade_scrape": False,
+        "aurcade_delay": 0.5,
+        "aurcade_index_only": False,
+        "aurcade_include_games": False,
+        "aurcade_limit": None,
         "apply": False,
         "plan_only": False,
         "skip_source_sync": False,
@@ -83,6 +88,22 @@ class SyncArcadeDataTests(unittest.TestCase):
 
         self.assertFalse(any("verify_locations_osm.py" in step.command for step in default_steps))
         self.assertTrue(any("verify_locations_osm.py" in step.command for step in osm_steps))
+
+    def test_aurcade_scrape_is_explicit_source_sync(self):
+        steps = build_sync_steps(
+            args(
+                source="aurcade",
+                aurcade_limit=5,
+                skip_validation=True,
+                skip_build=True,
+            ),
+            python="python",
+        )
+        commands = [" ".join(step.command) for step in steps]
+
+        self.assertTrue(any("scrape_aurcade_locations.py" in command for command in commands))
+        self.assertFalse(any("curate_us_sources.py" in command for command in commands))
+        self.assertIn("--limit", steps[0].command)
 
 
 if __name__ == "__main__":

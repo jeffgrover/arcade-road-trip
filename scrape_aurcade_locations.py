@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Scrape Aurcade locations into a local SQLite database.
+"""Scrape Aurcade locations into the canonical DuckDB database.
 
 Aurcade's location browser is an ASP.NET WebForms page. The script first
 collects location ids by posting each location type filter, then fetches each
-detail page at a polite cadence and upserts normalized rows into SQLite.
+detail page at a polite cadence and upserts normalized rows into DuckDB.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ import argparse
 import html
 from html.parser import HTMLParser
 import re
-import sqlite3
 import sys
 import time
 from dataclasses import dataclass
@@ -22,6 +21,10 @@ from typing import Dict, Iterable, List, Optional
 from urllib.error import URLError
 from urllib.parse import urlencode, urljoin
 from urllib.request import Request, urlopen
+
+import duckdb
+
+from arcade_db import DEFAULT_DUCKDB, connect as duckdb_connect, execute_script
 
 
 BASE_URL = "https://www.aurcade.com"
@@ -414,73 +417,70 @@ def parse_games(location_id: int, page: str) -> List[LocationGame]:
     return games
 
 
-def connect_db(path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(path)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.executescript(
+def connect_db(path: Path) -> duckdb.DuckDBPyConnection:
+    conn = duckdb_connect(path)
+    execute_script(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS scrape_runs (
-            id INTEGER PRIMARY KEY,
-            started_at TEXT NOT NULL,
-            completed_at TEXT,
-            source_url TEXT NOT NULL,
-            include_games INTEGER NOT NULL DEFAULT 0,
-            location_count INTEGER NOT NULL DEFAULT 0,
-            game_count INTEGER NOT NULL DEFAULT 0
+            id BIGINT,
+            started_at VARCHAR NOT NULL,
+            completed_at VARCHAR,
+            source_url VARCHAR NOT NULL,
+            include_games BIGINT NOT NULL DEFAULT 0,
+            location_count BIGINT NOT NULL DEFAULT 0,
+            game_count BIGINT NOT NULL DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS location_types (
-            type TEXT PRIMARY KEY
+            type VARCHAR
         );
 
         CREATE TABLE IF NOT EXISTS locations (
-            location_id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            type TEXT,
-            city TEXT,
-            state TEXT,
-            street_address TEXT,
-            postal_code TEXT,
-            phone TEXT,
-            address_text TEXT,
-            website_url TEXT,
-            is_public INTEGER,
-            game_count INTEGER,
-            unique_game_count INTEGER,
-            world_record_count INTEGER,
-            updated_text TEXT,
-            description TEXT,
-            latitude REAL,
-            longitude REAL,
-            detail_fetched_at TEXT,
-            source_url TEXT NOT NULL
+            location_id BIGINT,
+            name VARCHAR NOT NULL,
+            type VARCHAR,
+            city VARCHAR,
+            state VARCHAR,
+            street_address VARCHAR,
+            postal_code VARCHAR,
+            phone VARCHAR,
+            address_text VARCHAR,
+            website_url VARCHAR,
+            is_public BIGINT,
+            game_count BIGINT,
+            unique_game_count BIGINT,
+            world_record_count BIGINT,
+            updated_text VARCHAR,
+            description VARCHAR,
+            latitude DOUBLE,
+            longitude DOUBLE,
+            detail_fetched_at VARCHAR,
+            source_url VARCHAR NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS location_index_sources (
-            location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
-            filter_type TEXT NOT NULL REFERENCES location_types(type),
-            seen_at TEXT NOT NULL,
-            PRIMARY KEY (location_id, filter_type)
+            location_id BIGINT NOT NULL,
+            filter_type VARCHAR NOT NULL,
+            seen_at VARCHAR NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS games (
-            game_id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            manufacturer TEXT
+            game_id BIGINT,
+            name VARCHAR NOT NULL,
+            manufacturer VARCHAR
         );
 
         CREATE TABLE IF NOT EXISTS location_games (
-            location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
-            game_id INTEGER NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
-            cabinet_type TEXT,
-            year INTEGER,
-            players INTEGER,
-            controls_condition INTEGER,
-            screen_condition INTEGER,
-            cabinet_condition INTEGER,
-            fetched_at TEXT NOT NULL,
-            PRIMARY KEY (location_id, game_id)
+            location_id BIGINT NOT NULL,
+            game_id BIGINT NOT NULL,
+            cabinet_type VARCHAR,
+            year BIGINT,
+            players BIGINT,
+            controls_condition BIGINT,
+            screen_condition BIGINT,
+            cabinet_condition BIGINT,
+            fetched_at VARCHAR NOT NULL
         );
 
         CREATE INDEX IF NOT EXISTS idx_locations_state_city ON locations(state, city);
@@ -495,151 +495,192 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def next_scrape_run_id(conn: duckdb.DuckDBPyConnection) -> int:
+    value = conn.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM scrape_runs").fetchone()[0]
+    return int(value)
+
+
 def upsert_index_row(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     row: LocationIndexRow,
     filter_type: str,
     seen_at: str,
 ) -> None:
-    conn.execute("INSERT OR IGNORE INTO location_types(type) VALUES (?)", (filter_type,))
-    conn.execute(
-        """
-        INSERT INTO locations (
-            location_id, name, type, city, state, website_url, is_public,
-            game_count, source_url
+    if not conn.execute("SELECT 1 FROM location_types WHERE type = ?", (filter_type,)).fetchone():
+        conn.execute("INSERT INTO location_types(type) VALUES (?)", (filter_type,))
+    values = (
+        row.location_id,
+        row.name,
+        row.location_type,
+        row.city,
+        row.state,
+        row.website_url,
+        None if row.is_public is None else int(row.is_public),
+        row.game_count,
+        f"{BASE_URL}/locations/view.aspx?id={row.location_id}",
+    )
+    if conn.execute("SELECT 1 FROM locations WHERE location_id = ?", (row.location_id,)).fetchone():
+        conn.execute(
+            """
+            UPDATE locations SET
+                name = ?,
+                type = COALESCE(type, ?),
+                city = COALESCE(city, ?),
+                state = COALESCE(state, ?),
+                website_url = COALESCE(website_url, ?),
+                is_public = COALESCE(is_public, ?),
+                game_count = COALESCE(game_count, ?)
+            WHERE location_id = ?
+            """,
+            (row.name, row.location_type, row.city, row.state, row.website_url, values[6], row.game_count, row.location_id),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(location_id) DO UPDATE SET
-            name=excluded.name,
-            type=COALESCE(locations.type, excluded.type),
-            city=COALESCE(locations.city, excluded.city),
-            state=COALESCE(locations.state, excluded.state),
-            website_url=COALESCE(locations.website_url, excluded.website_url),
-            is_public=COALESCE(locations.is_public, excluded.is_public),
-            game_count=COALESCE(locations.game_count, excluded.game_count)
-        """,
-        (
-            row.location_id,
-            row.name,
-            row.location_type,
-            row.city,
-            row.state,
-            row.website_url,
-            None if row.is_public is None else int(row.is_public),
-            row.game_count,
-            f"{BASE_URL}/locations/view.aspx?id={row.location_id}",
-        ),
+    else:
+        conn.execute(
+            """
+            INSERT INTO locations (
+                location_id, name, type, city, state, website_url, is_public,
+                game_count, source_url
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            values,
+        )
+    conn.execute(
+        "DELETE FROM location_index_sources WHERE location_id = ? AND filter_type = ?",
+        (row.location_id, filter_type),
     )
     conn.execute(
-        """
-        INSERT INTO location_index_sources(location_id, filter_type, seen_at)
-        VALUES (?, ?, ?)
-        ON CONFLICT(location_id, filter_type) DO UPDATE SET seen_at=excluded.seen_at
-        """,
+        "INSERT INTO location_index_sources(location_id, filter_type, seen_at) VALUES (?, ?, ?)",
         (row.location_id, filter_type, seen_at),
     )
 
 
-def upsert_detail(conn: sqlite3.Connection, detail: LocationDetail, fetched_at: str) -> None:
-    conn.execute(
-        """
-        INSERT INTO locations (
-            location_id, name, type, city, state, street_address, postal_code,
-            phone, address_text, website_url, game_count, unique_game_count,
-            world_record_count, updated_text, description, latitude, longitude,
-            detail_fetched_at, source_url
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(location_id) DO UPDATE SET
-            name=excluded.name,
-            type=COALESCE(excluded.type, locations.type),
-            city=COALESCE(excluded.city, locations.city),
-            state=COALESCE(excluded.state, locations.state),
-            street_address=excluded.street_address,
-            postal_code=excluded.postal_code,
-            phone=excluded.phone,
-            address_text=excluded.address_text,
-            website_url=COALESCE(excluded.website_url, locations.website_url),
-            game_count=COALESCE(excluded.game_count, locations.game_count),
-            unique_game_count=excluded.unique_game_count,
-            world_record_count=excluded.world_record_count,
-            updated_text=excluded.updated_text,
-            description=excluded.description,
-            latitude=excluded.latitude,
-            longitude=excluded.longitude,
-            detail_fetched_at=excluded.detail_fetched_at,
-            source_url=excluded.source_url
-        """,
-        (
-            detail.location_id,
-            detail.name,
-            detail.location_type,
-            detail.city,
-            detail.state,
-            detail.street_address,
-            detail.postal_code,
-            detail.phone,
-            detail.address_text,
-            detail.website_url,
-            detail.game_count,
-            detail.unique_game_count,
-            detail.world_record_count,
-            detail.updated_text,
-            detail.description,
-            detail.latitude,
-            detail.longitude,
-            fetched_at,
-            f"{BASE_URL}/locations/view.aspx?id={detail.location_id}",
-        ),
+def upsert_detail(conn: duckdb.DuckDBPyConnection, detail: LocationDetail, fetched_at: str) -> None:
+    values = (
+        detail.location_id,
+        detail.name,
+        detail.location_type,
+        detail.city,
+        detail.state,
+        detail.street_address,
+        detail.postal_code,
+        detail.phone,
+        detail.address_text,
+        detail.website_url,
+        detail.game_count,
+        detail.unique_game_count,
+        detail.world_record_count,
+        detail.updated_text,
+        detail.description,
+        detail.latitude,
+        detail.longitude,
+        fetched_at,
+        f"{BASE_URL}/locations/view.aspx?id={detail.location_id}",
     )
+    if conn.execute("SELECT 1 FROM locations WHERE location_id = ?", (detail.location_id,)).fetchone():
+        conn.execute(
+            """
+            UPDATE locations SET
+                name = ?,
+                type = COALESCE(?, type),
+                city = COALESCE(?, city),
+                state = COALESCE(?, state),
+                street_address = ?,
+                postal_code = ?,
+                phone = ?,
+                address_text = ?,
+                website_url = COALESCE(?, website_url),
+                game_count = COALESCE(?, game_count),
+                unique_game_count = ?,
+                world_record_count = ?,
+                updated_text = ?,
+                description = ?,
+                latitude = ?,
+                longitude = ?,
+                detail_fetched_at = ?,
+                source_url = ?
+            WHERE location_id = ?
+            """,
+            (*values[1:], detail.location_id),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO locations (
+                location_id, name, type, city, state, street_address, postal_code,
+                phone, address_text, website_url, game_count, unique_game_count,
+                world_record_count, updated_text, description, latitude, longitude,
+                detail_fetched_at, source_url
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            values,
+        )
 
 
-def upsert_games(conn: sqlite3.Connection, games: Iterable[LocationGame], fetched_at: str) -> int:
+def upsert_games(conn: duckdb.DuckDBPyConnection, games: Iterable[LocationGame], fetched_at: str) -> int:
     count = 0
     for game in games:
-        conn.execute(
-            """
-            INSERT INTO games(game_id, name, manufacturer)
-            VALUES (?, ?, ?)
-            ON CONFLICT(game_id) DO UPDATE SET
-                name=excluded.name,
-                manufacturer=COALESCE(excluded.manufacturer, games.manufacturer)
-            """,
-            (game.game_id, game.name, game.manufacturer),
-        )
-        conn.execute(
-            """
-            INSERT INTO location_games (
-                location_id, game_id, cabinet_type, year, players,
-                controls_condition, screen_condition, cabinet_condition, fetched_at
+        if conn.execute("SELECT 1 FROM games WHERE game_id = ?", (game.game_id,)).fetchone():
+            conn.execute(
+                """
+                UPDATE games SET
+                    name = ?,
+                    manufacturer = COALESCE(?, manufacturer)
+                WHERE game_id = ?
+                """,
+                (game.name, game.manufacturer, game.game_id),
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(location_id, game_id) DO UPDATE SET
-                cabinet_type=excluded.cabinet_type,
-                year=excluded.year,
-                players=excluded.players,
-                controls_condition=excluded.controls_condition,
-                screen_condition=excluded.screen_condition,
-                cabinet_condition=excluded.cabinet_condition,
-                fetched_at=excluded.fetched_at
-            """,
-            (
-                game.location_id,
-                game.game_id,
-                game.cabinet_type,
-                game.year,
-                game.players,
-                game.controls_condition,
-                game.screen_condition,
-                game.cabinet_condition,
-                fetched_at,
-            ),
+        else:
+            conn.execute(
+                "INSERT INTO games(game_id, name, manufacturer) VALUES (?, ?, ?)",
+                (game.game_id, game.name, game.manufacturer),
+            )
+        location_game = (
+            game.location_id,
+            game.game_id,
+            game.cabinet_type,
+            game.year,
+            game.players,
+            game.controls_condition,
+            game.screen_condition,
+            game.cabinet_condition,
+            fetched_at,
         )
+        if conn.execute(
+            "SELECT 1 FROM location_games WHERE location_id = ? AND game_id = ?",
+            location_game[:2],
+        ).fetchone():
+            conn.execute(
+                """
+                UPDATE location_games SET
+                    cabinet_type = ?,
+                    year = ?,
+                    players = ?,
+                    controls_condition = ?,
+                    screen_condition = ?,
+                    cabinet_condition = ?,
+                    fetched_at = ?
+                WHERE location_id = ? AND game_id = ?
+                """,
+                (*location_game[2:], game.location_id, game.game_id),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO location_games (
+                    location_id, game_id, cabinet_type, year, players,
+                    controls_condition, screen_condition, cabinet_condition, fetched_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                location_game,
+            )
         count += 1
     return count
 
 
-def existing_detail_ids(conn: sqlite3.Connection) -> set[int]:
+def existing_detail_ids(conn: duckdb.DuckDBPyConnection) -> set[int]:
     return {
         int(row[0])
         for row in conn.execute(
@@ -649,7 +690,7 @@ def existing_detail_ids(conn: sqlite3.Connection) -> set[int]:
 
 
 def collect_index(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     delay: float,
     verbose: bool,
 ) -> List[int]:
@@ -674,10 +715,9 @@ def collect_index(
         )
         result_page = fetch_with_retries(LOCATIONS_URL, data=fields, delay=delay)
         rows = parse_index_rows(result_page)
-        with conn:
-            for row in rows:
-                upsert_index_row(conn, row, location_type, seen_at)
-                ids.add(row.location_id)
+        for row in rows:
+            upsert_index_row(conn, row, location_type, seen_at)
+            ids.add(row.location_id)
         if verbose:
             print(
                 f"[index {index:02d}/{len(location_types)}] {location_type}: "
@@ -688,7 +728,7 @@ def collect_index(
 
 
 def fetch_details(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     location_ids: List[int],
     delay: float,
     limit: Optional[int],
@@ -710,16 +750,14 @@ def fetch_details(
         detail_page = fetch_with_retries(detail_url, delay=delay)
         fetched_at = utc_now()
         detail = parse_detail(location_id, detail_page)
-        with conn:
-            upsert_detail(conn, detail, fetched_at)
+        upsert_detail(conn, detail, fetched_at)
         detail_count += 1
 
         if include_games:
             games_url = f"{BASE_URL}/services/ws_games.aspx?a=lg&id={location_id}"
             games_page = fetch_with_retries(games_url, delay=delay)
             games = parse_games(location_id, games_page)
-            with conn:
-                game_count += upsert_games(conn, games, utc_now())
+            game_count += upsert_games(conn, games, utc_now())
             time.sleep(delay)
 
         if verbose:
@@ -730,13 +768,13 @@ def fetch_details(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Politely scrape Aurcade locations into SQLite."
+        description="Politely scrape Aurcade locations into DuckDB."
     )
     parser.add_argument(
         "--db",
         type=Path,
-        default=Path("aurcade_locations.sqlite"),
-        help="SQLite database path (default: aurcade_locations.sqlite)",
+        default=DEFAULT_DUCKDB,
+        help=f"DuckDB database path (default: {DEFAULT_DUCKDB})",
     )
     parser.add_argument(
         "--delay",
@@ -776,11 +814,11 @@ def main() -> int:
     args = parse_args()
     conn = connect_db(args.db)
     started_at = utc_now()
-    cursor = conn.execute(
-        "INSERT INTO scrape_runs(started_at, source_url, include_games) VALUES (?, ?, ?)",
-        (started_at, LOCATIONS_URL, int(args.include_games)),
+    run_id = next_scrape_run_id(conn)
+    conn.execute(
+        "INSERT INTO scrape_runs(id, started_at, source_url, include_games) VALUES (?, ?, ?, ?)",
+        (run_id, started_at, LOCATIONS_URL, int(args.include_games)),
     )
-    run_id = int(cursor.lastrowid)
 
     try:
         location_ids = collect_index(conn, args.delay, not args.quiet)
@@ -797,15 +835,14 @@ def main() -> int:
                 verbose=not args.quiet,
             )
         completed_at = utc_now()
-        with conn:
-            conn.execute(
-                """
-                UPDATE scrape_runs
-                SET completed_at = ?, location_count = ?, game_count = ?
-                WHERE id = ?
-                """,
-                (completed_at, len(location_ids), game_count, run_id),
-            )
+        conn.execute(
+            """
+            UPDATE scrape_runs
+            SET completed_at = ?, location_count = ?, game_count = ?
+            WHERE id = ?
+            """,
+            (completed_at, len(location_ids), game_count, run_id),
+        )
         print(
             f"Done. Indexed {len(location_ids)} locations, fetched {detail_count} "
             f"details, wrote {game_count} location-game rows to {args.db}."

@@ -45,6 +45,8 @@ def source_skip_args(source: str) -> list[str]:
         return ["--skip-ziv"]
     if source == "ziv":
         return ["--skip-pinballmap"]
+    if source == "aurcade":
+        return ["--skip-pinballmap", "--skip-ziv"]
     return []
 
 
@@ -53,31 +55,56 @@ def build_sync_steps(args: argparse.Namespace, python: str = sys.executable) -> 
     scoped = state_args(args)
 
     if not args.skip_source_sync:
-        steps.append(
-            SyncStep(
-                phase="source-sync",
-                name="curate source updates",
-                command=(
-                    python,
-                    "curate_us_sources.py",
-                    "--db",
-                    str(args.duckdb),
-                    "--report-dir",
-                    str(args.report_dir),
-                    *scoped,
-                    *apply_flag(args),
-                    *source_skip_args(args.source),
-                    "--cache-hours",
-                    str(args.cache_hours),
-                    "--delay-seconds",
-                    str(args.delay_seconds),
-                    "--log-file",
-                    str(args.report_dir / "sync_arcade_data.log"),
-                ),
-                networked=True,
-                mutates=args.apply,
+        if args.source in ("all", "pinballmap", "ziv"):
+            steps.append(
+                SyncStep(
+                    phase="source-sync",
+                    name="curate source updates",
+                    command=(
+                        python,
+                        "curate_us_sources.py",
+                        "--db",
+                        str(args.duckdb),
+                        "--report-dir",
+                        str(args.report_dir),
+                        *scoped,
+                        *apply_flag(args),
+                        *source_skip_args(args.source),
+                        "--cache-hours",
+                        str(args.cache_hours),
+                        "--delay-seconds",
+                        str(args.delay_seconds),
+                        "--log-file",
+                        str(args.report_dir / "sync_arcade_data.log"),
+                    ),
+                    networked=True,
+                    mutates=args.apply,
+                )
             )
-        )
+        if args.source == "aurcade" or args.include_aurcade_scrape:
+            aurcade_command = [
+                python,
+                "scrape_aurcade_locations.py",
+                "--db",
+                str(args.duckdb),
+                "--delay",
+                str(args.aurcade_delay),
+            ]
+            if args.aurcade_index_only:
+                aurcade_command.append("--index-only")
+            if args.aurcade_include_games:
+                aurcade_command.append("--include-games")
+            if args.aurcade_limit is not None:
+                aurcade_command.extend(["--limit", str(args.aurcade_limit)])
+            steps.append(
+                SyncStep(
+                    phase="source-sync",
+                    name="scrape Aurcade baseline",
+                    command=tuple(aurcade_command),
+                    networked=True,
+                    mutates=True,
+                )
+            )
 
     if not args.skip_validation:
         if args.validation in ("all", "pinballmap") and args.source in ("all", "pinballmap"):
@@ -156,7 +183,7 @@ def build_sync_steps(args: argparse.Namespace, python: str = sys.executable) -> 
             )
         )
 
-    if not args.skip_canonicalization and args.source in ("all", "pinballmap", "ziv"):
+    if not args.skip_canonicalization and args.source in ("all", "pinballmap", "ziv", "aurcade"):
         steps.append(
             SyncStep(
                 phase="curation",
@@ -209,7 +236,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--duckdb", type=Path, default=DEFAULT_DUCKDB)
     parser.add_argument("--report-dir", type=Path, default=DEFAULT_REPORT_DIR)
     parser.add_argument("--output", type=Path, default=Path("static/arcade_road_trip.html"))
-    parser.add_argument("--source", choices=("all", "pinballmap", "ziv"), default="all")
+    parser.add_argument("--source", choices=("all", "pinballmap", "ziv", "aurcade"), default="all")
     parser.add_argument("--validation", choices=("all", "pinballmap", "ziv", "osm"), default="all")
     parser.add_argument("--state", default="UT")
     parser.add_argument("--states")
@@ -218,6 +245,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--delay-seconds", type=float, default=1.0)
     parser.add_argument("--validation-limit", type=int, default=100)
     parser.add_argument("--osm-limit", type=int, default=25)
+    parser.add_argument("--include-aurcade-scrape", action="store_true", help="Also run the slow Aurcade browser scrape.")
+    parser.add_argument("--aurcade-delay", type=float, default=0.5)
+    parser.add_argument("--aurcade-index-only", action="store_true")
+    parser.add_argument("--aurcade-include-games", action="store_true")
+    parser.add_argument("--aurcade-limit", type=int)
     parser.add_argument("--apply", action="store_true", help="Apply source/validation writes. Without this, wrapped source steps dry-run.")
     parser.add_argument("--plan-only", action="store_true", help="Print the phase plan without running commands.")
     parser.add_argument("--skip-source-sync", action="store_true")
