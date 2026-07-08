@@ -7,7 +7,7 @@ from sync_arcade_data import build_sync_steps
 
 def args(**overrides):
     defaults = {
-        "sqlite_db": Path("legacy.sqlite"),
+        "legacy_sqlite_db": Path("legacy.sqlite"),
         "duckdb": Path("arcade.duckdb"),
         "report_dir": Path("reports"),
         "output": Path("static/arcade_road_trip.html"),
@@ -26,6 +26,7 @@ def args(**overrides):
         "skip_canonicalization": False,
         "skip_validation": False,
         "include_osm_validation": False,
+        "refresh_from_sqlite": False,
         "skip_migration": False,
         "skip_build": False,
     }
@@ -38,15 +39,24 @@ class SyncArcadeDataTests(unittest.TestCase):
         steps = build_sync_steps(args(), python="python")
 
         self.assertEqual(
-            ["source-sync", "validation", "validation", "database", "curation", "artifact-build"],
+            ["source-sync", "validation", "validation", "curation", "artifact-build"],
             [step.phase for step in steps],
         )
         self.assertEqual("curate source updates", steps[0].name)
-        self.assertIn("migrate_sqlite_to_duckdb.py", steps[-3].command)
+        self.assertIn("arcade.duckdb", steps[0].command)
+        self.assertFalse(any("migrate_sqlite_to_duckdb.py" in step.command for step in steps))
         self.assertIn("canonicalize_games.py", steps[-2].command)
         self.assertIn("arcade.duckdb", steps[-2].command)
         self.assertIn("generate_static_app.py", steps[-1].command)
         self.assertNotIn("--apply", steps[0].command)
+
+    def test_legacy_sqlite_bootstrap_is_optional(self):
+        steps = build_sync_steps(args(refresh_from_sqlite=True), python="python")
+        bootstrap = next(step for step in steps if step.phase == "database-bootstrap")
+
+        self.assertIn("migrate_sqlite_to_duckdb.py", bootstrap.command)
+        self.assertIn("legacy.sqlite", bootstrap.command)
+        self.assertIn("arcade.duckdb", bootstrap.command)
 
     def test_apply_is_forwarded_to_mutating_wrapped_steps(self):
         steps = build_sync_steps(args(apply=True), python="python")

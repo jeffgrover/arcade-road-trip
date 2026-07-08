@@ -12,13 +12,15 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sqlite3
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import duckdb
+
+from arcade_db import execute_script, rows as duckdb_rows
 from import_pinballmap_locations import ExistingGame, game_similarity
 from import_ziv_locations import DEFAULT_CACHE, DEFAULT_DB, ZivDetail, fetch_ziv_detail, ziv_db_id
 from validate_ziv_locations import ZivArcade, connect, ensure_schema, fetch_ziv_us_arcades
@@ -74,46 +76,44 @@ class MachineDecision:
     insert_game: bool
 
 
-def ensure_machine_schema(conn: sqlite3.Connection) -> None:
+def ensure_machine_schema(conn: duckdb.DuckDBPyConnection) -> None:
     ensure_schema(conn)
-    conn.execute(
+    execute_script(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS ziv_machine_links (
-            location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
-            ziv_location_id INTEGER NOT NULL,
-            ziv_machine_id INTEGER NOT NULL,
-            ziv_game_id INTEGER NOT NULL,
-            game_id INTEGER NOT NULL REFERENCES games(game_id) ON DELETE CASCADE,
-            confidence REAL NOT NULL,
-            method TEXT NOT NULL,
-            linked_at TEXT NOT NULL,
-            PRIMARY KEY (location_id, ziv_machine_id)
-        )
-        """
-    )
-    conn.execute(
-        """
+            location_id BIGINT NOT NULL,
+            ziv_location_id BIGINT NOT NULL,
+            ziv_machine_id BIGINT NOT NULL,
+            ziv_game_id BIGINT NOT NULL,
+            game_id BIGINT NOT NULL,
+            confidence DOUBLE NOT NULL,
+            method VARCHAR NOT NULL,
+            linked_at VARCHAR NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_ziv_machine_links_ziv_game
-            ON ziv_machine_links(ziv_game_id)
+            ON ziv_machine_links(ziv_game_id);
         """
     )
 
 
-def load_existing_games(conn: sqlite3.Connection) -> list[ExistingGame]:
+def load_existing_games(conn: duckdb.DuckDBPyConnection) -> list[ExistingGame]:
     return [
         ExistingGame(game_id=int(row["game_id"]), name=row["name"], manufacturer=row["manufacturer"])
-        for row in conn.execute("SELECT game_id, name, manufacturer FROM games")
+        for row in duckdb_rows(conn, "SELECT game_id, name, manufacturer FROM games")
     ]
 
 
-def load_location_inventory(conn: sqlite3.Connection, location_id: int) -> list[ExistingLocationGame]:
+def load_location_inventory(conn: duckdb.DuckDBPyConnection, location_id: int) -> list[ExistingLocationGame]:
     return [
         ExistingLocationGame(
             game_id=int(row["game_id"]),
             name=row["name"],
             cabinet_type=row["cabinet_type"],
         )
-        for row in conn.execute(
+        for row in duckdb_rows(
+            conn,
             """
             SELECT g.game_id, g.name, lg.cabinet_type
             FROM location_games lg
@@ -125,23 +125,22 @@ def load_location_inventory(conn: sqlite3.Connection, location_id: int) -> list[
     ]
 
 
-def load_ziv_links(conn: sqlite3.Connection, states: list[str], include_ziv_only: bool) -> list[sqlite3.Row]:
+def load_ziv_links(conn: duckdb.DuckDBPyConnection, states: list[str], include_ziv_only: bool) -> list[dict]:
     ziv_only_filter = "" if include_ziv_only else "AND l.location_id NOT BETWEEN -2999999999 AND -2000000000"
     placeholders = ",".join("?" for _ in states)
-    return list(
-        conn.execute(
-            f"""
-            SELECT l.location_id, l.name, l.city, l.state, z.ziv_location_id, z.method
-            FROM ziv_location_links z
-            JOIN locations l ON l.location_id = z.location_id
-            LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
-            WHERE l.state IN ({placeholders})
-              AND COALESCE(ls.status, 'active') NOT IN ('closed', 'replaced')
-              {ziv_only_filter}
-            ORDER BY l.state, l.city, l.name, z.ziv_location_id
-            """,
-            states,
-        )
+    return duckdb_rows(
+        conn,
+        f"""
+        SELECT l.location_id, l.name, l.city, l.state, z.ziv_location_id, z.method
+        FROM ziv_location_links z
+        JOIN locations l ON l.location_id = z.location_id
+        LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
+        WHERE l.state IN ({placeholders})
+          AND COALESCE(ls.status, 'active') NOT IN ('closed', 'replaced')
+          {ziv_only_filter}
+        ORDER BY l.state, l.city, l.name, z.ziv_location_id
+        """,
+        states,
     )
 
 
@@ -216,7 +215,7 @@ def best_global_game(machine_name: str, games: list[ExistingGame]) -> tuple[Opti
     return best, best_score
 
 
-def already_linked(conn: sqlite3.Connection, location_id: int, ziv_machine_id: int) -> bool:
+def already_linked(conn: duckdb.DuckDBPyConnection, location_id: int, ziv_machine_id: int) -> bool:
     return bool(
         conn.execute(
             """
@@ -229,7 +228,7 @@ def already_linked(conn: sqlite3.Connection, location_id: int, ziv_machine_id: i
 
 
 def build_plan(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     cache: Path,
     cache_hours: float,
     states: list[str],
@@ -312,53 +311,57 @@ def build_plan(
     return decisions
 
 
-def apply_plan(conn: sqlite3.Connection, decisions: list[MachineDecision], checked_at: str) -> None:
+def apply_plan(conn: duckdb.DuckDBPyConnection, decisions: list[MachineDecision], checked_at: str) -> None:
     game_rows = {
         decision.local_game_id: (decision.local_game_id, decision.local_game_name)
         for decision in decisions
         if decision.insert_game
     }
-    conn.executemany(
-        """
-        INSERT INTO games (game_id, name, manufacturer)
-        VALUES (?, ?, NULL)
-        ON CONFLICT(game_id) DO UPDATE SET name = excluded.name
-        """,
-        list(game_rows.values()),
-    )
-    conn.executemany(
-        """
-        INSERT INTO location_games (
-            location_id, game_id, cabinet_type, year, players,
-            controls_condition, screen_condition, cabinet_condition, fetched_at
+    for row in game_rows.values():
+        if conn.execute("SELECT 1 FROM games WHERE game_id = ?", (row[0],)).fetchone():
+            conn.execute("UPDATE games SET name = ? WHERE game_id = ?", (row[1], row[0]))
+        else:
+            conn.execute("INSERT INTO games (game_id, name, manufacturer) VALUES (?, ?, NULL)", row)
+    for decision in decisions:
+        if not decision.insert_location_game:
+            continue
+        if conn.execute(
+            "SELECT 1 FROM location_games WHERE location_id = ? AND game_id = ?",
+            (decision.location_id, decision.local_game_id),
+        ).fetchone():
+            conn.execute(
+                """
+                UPDATE location_games SET
+                    cabinet_type = COALESCE(cabinet_type, ?),
+                    fetched_at = ?
+                WHERE location_id = ? AND game_id = ?
+                """,
+                (decision.cabinet_type, checked_at, decision.location_id, decision.local_game_id),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO location_games (
+                    location_id, game_id, cabinet_type, year, players,
+                    controls_condition, screen_condition, cabinet_condition, fetched_at
+                )
+                VALUES (?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?)
+                """,
+                (decision.location_id, decision.local_game_id, decision.cabinet_type, checked_at),
+            )
+    for decision in decisions:
+        conn.execute(
+            "DELETE FROM ziv_machine_links WHERE location_id = ? AND ziv_machine_id = ?",
+            (decision.location_id, decision.ziv_machine_id),
         )
-        VALUES (?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?)
-        ON CONFLICT(location_id, game_id) DO UPDATE SET
-            cabinet_type = COALESCE(location_games.cabinet_type, excluded.cabinet_type),
-            fetched_at = excluded.fetched_at
-        """,
-        [
-            (decision.location_id, decision.local_game_id, decision.cabinet_type, checked_at)
-            for decision in decisions
-            if decision.insert_location_game
-        ],
-    )
-    conn.executemany(
-        """
-        INSERT INTO ziv_machine_links (
-            location_id, ziv_location_id, ziv_machine_id, ziv_game_id,
-            game_id, confidence, method, linked_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(location_id, ziv_machine_id) DO UPDATE SET
-            ziv_location_id = excluded.ziv_location_id,
-            ziv_game_id = excluded.ziv_game_id,
-            game_id = excluded.game_id,
-            confidence = excluded.confidence,
-            method = excluded.method,
-            linked_at = excluded.linked_at
-        """,
-        [
+        conn.execute(
+            """
+            INSERT INTO ziv_machine_links (
+                location_id, ziv_location_id, ziv_machine_id, ziv_game_id,
+                game_id, confidence, method, linked_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
             (
                 decision.location_id,
                 decision.ziv_location_id,
@@ -368,10 +371,8 @@ def apply_plan(conn: sqlite3.Connection, decisions: list[MachineDecision], check
                 decision.confidence,
                 decision.method,
                 checked_at,
-            )
-            for decision in decisions
-        ],
-    )
+            ),
+        )
     changed_locations = sorted({decision.location_id for decision in decisions if decision.insert_location_game})
     for location_id in changed_locations:
         conn.execute(

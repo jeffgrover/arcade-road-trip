@@ -43,7 +43,7 @@ concerns separate while wrapping the current source-specific scripts:
 - source sync: poll/fetch upstream source changes;
 - curation: canonicalize obvious game aliases;
 - validation: check source links and review queues;
-- database: refresh the canonical DuckDB file from the legacy SQLite writers;
+- database: sync and validate source data directly in canonical DuckDB;
 - curation: apply deterministic DuckDB-native cleanup such as game aliases;
 - artifact build: regenerate Parquet intermediates and the one-file atlas.
 
@@ -86,10 +86,10 @@ one deployable HTML artifact:
 - `sync_arcade_data.py`: operations wrapper for source sync, validation,
   DuckDB refresh, and static artifact generation.
 - `arcade_db.py`: shared DuckDB connection/query helpers for pipeline scripts.
-- `migrate_sqlite_to_duckdb.py`: one-way migration from the legacy SQLite
-  snapshot while import/curation writers are being ported.
-- `aurcade_locations.sqlite`: legacy SQLite source snapshot retained during the
-  migration.
+- `migrate_sqlite_to_duckdb.py`: optional bootstrap from the legacy SQLite
+  snapshot.
+- `aurcade_locations.sqlite`: legacy SQLite source snapshot retained for
+  bootstrap/reference only.
 - `arcade_query.py`: read-only DuckDB CLI for analysis.
 - `curate_us_sources.py`: national source-enrichment orchestrator.
 - `export_static_data.py`: shared Parquet snapshot builders used by the atlas.
@@ -132,11 +132,10 @@ default and writes review reports under `reports/`:
 .venv/bin/python curate_us_sources.py --all-continental-us
 ```
 
-The top-level source curation wrapper is still transitional while ZIv and OSM
-validation are being ported. Apply mode makes a SQLite backup unless
-`--skip-backup` is passed; `arcade_query.py` no longer runs lazy source
-verification against the canonical DuckDB file until the verifier itself is
-ported.
+The source curation and validation pipeline writes directly to DuckDB. Apply
+mode makes a timestamped DuckDB backup unless `--skip-backup` is passed;
+`arcade_query.py` keeps lazy source verification disabled for DuckDB query
+sessions, so run validation through `sync_arcade_data.py` instead.
 
 ```bash
 .venv/bin/python curate_us_sources.py --all-continental-us --apply
@@ -151,9 +150,9 @@ privileged/admin exports, but it is not the national path.
 ```bash
 .venv/bin/python arcade_query.py summary
 .venv/bin/python sync_arcade_data.py --plan-only
-.venv/bin/python migrate_sqlite_to_duckdb.py --replace
+.venv/bin/python sync_arcade_data.py --plan-only --refresh-from-sqlite
 .venv/bin/python generate_static_app.py
 .venv/bin/python -m unittest discover -s tests
 .venv/bin/python -m py_compile arcade_db.py arcade_query.py canonicalize_games.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scrape_aurcade_locations.py arcade_roadtrip_app.py curate_us_sources.py us_states.py sync_arcade_data.py migrate_sqlite_to_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
-sqlite3 aurcade_locations.sqlite "PRAGMA integrity_check; PRAGMA foreign_key_check;"
+.venv/bin/python arcade_query.py sql "SELECT COUNT(*) AS locations FROM locations"
 ```

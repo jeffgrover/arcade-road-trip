@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """One-command Arcade Road Trip data sync orchestration.
 
-This is the operations entrypoint. For now it wraps the proven source scripts,
-then migrates the legacy SQLite write target into canonical DuckDB and rebuilds
-the static atlas. The phase boundaries are intentionally explicit so wrapped
-steps can be replaced with native DuckDB implementations over time.
+This is the operations entrypoint. It syncs source data into canonical DuckDB,
+runs validation/curation phases, and rebuilds the static atlas artifact.
 """
 
 from __future__ import annotations
@@ -16,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-DEFAULT_SQLITE_DB = Path("aurcade_locations.sqlite")
+DEFAULT_LEGACY_SQLITE_DB = Path("aurcade_locations.sqlite")
 DEFAULT_DUCKDB = Path("arcade_roadtrip.duckdb")
 DEFAULT_REPORT_DIR = Path("reports")
 
@@ -63,7 +61,7 @@ def build_sync_steps(args: argparse.Namespace, python: str = sys.executable) -> 
                     python,
                     "curate_us_sources.py",
                     "--db",
-                    str(args.sqlite_db),
+                    str(args.duckdb),
                     "--report-dir",
                     str(args.report_dir),
                     *scoped,
@@ -91,7 +89,7 @@ def build_sync_steps(args: argparse.Namespace, python: str = sys.executable) -> 
                         python,
                         "validate_pinballmap_locations.py",
                         "--db",
-                        str(args.sqlite_db),
+                        str(args.duckdb),
                         *scoped,
                         "--limit",
                         str(args.validation_limit),
@@ -110,7 +108,8 @@ def build_sync_steps(args: argparse.Namespace, python: str = sys.executable) -> 
                         python,
                         "validate_ziv_locations.py",
                         "--db",
-                        str(args.sqlite_db),
+                        str(args.duckdb),
+                        *scoped,
                         "--limit",
                         str(args.validation_limit),
                         *apply_flag(args),
@@ -128,7 +127,7 @@ def build_sync_steps(args: argparse.Namespace, python: str = sys.executable) -> 
                         python,
                         "verify_locations_osm.py",
                         "--db",
-                        str(args.sqlite_db),
+                        str(args.duckdb),
                         *scoped,
                         "--limit",
                         str(args.osm_limit),
@@ -139,16 +138,16 @@ def build_sync_steps(args: argparse.Namespace, python: str = sys.executable) -> 
                 )
             )
 
-    if not args.skip_migration:
+    if args.refresh_from_sqlite and not args.skip_migration:
         steps.append(
             SyncStep(
-                phase="database",
-                name="refresh canonical DuckDB",
+                phase="database-bootstrap",
+                name="refresh canonical DuckDB from legacy SQLite",
                 command=(
                     python,
                     "migrate_sqlite_to_duckdb.py",
                     "--sqlite",
-                    str(args.sqlite_db),
+                    str(args.legacy_sqlite_db),
                     "--duckdb",
                     str(args.duckdb),
                     "--replace",
@@ -206,7 +205,7 @@ def run_steps(steps: list[SyncStep], dry_run: bool) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Sync source arcade data into DuckDB and rebuild the static atlas.")
-    parser.add_argument("--sqlite-db", type=Path, default=DEFAULT_SQLITE_DB)
+    parser.add_argument("--legacy-sqlite-db", type=Path, default=DEFAULT_LEGACY_SQLITE_DB)
     parser.add_argument("--duckdb", type=Path, default=DEFAULT_DUCKDB)
     parser.add_argument("--report-dir", type=Path, default=DEFAULT_REPORT_DIR)
     parser.add_argument("--output", type=Path, default=Path("static/arcade_road_trip.html"))
@@ -225,7 +224,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-canonicalization", action="store_true")
     parser.add_argument("--skip-validation", action="store_true")
     parser.add_argument("--include-osm-validation", action="store_true", help="Include rate-limited Nominatim validation.")
-    parser.add_argument("--skip-migration", action="store_true")
+    parser.add_argument("--refresh-from-sqlite", action="store_true", help="Bootstrap DuckDB from the legacy SQLite snapshot before curation/build.")
+    parser.add_argument("--skip-migration", action="store_true", help="Deprecated alias for suppressing --refresh-from-sqlite.")
     parser.add_argument("--skip-build", action="store_true")
     return parser
 

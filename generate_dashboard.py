@@ -436,7 +436,7 @@ def build_html(data: dict[str, Any]) -> str:
       <div class="panel table-wrap"><table id="arcade-table"></table></div>
     </section>
 
-    <p class="footer">Generated from local SQLite data at {generated}. Rare U.S. counts use canonical game mappings and active continental U.S. locations.</p>
+    <p class="footer">Generated from canonical DuckDB data at {generated}. Rare U.S. counts use canonical game mappings and active continental U.S. locations.</p>
   </main>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>

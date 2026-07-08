@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import sqlite3
 import time
 import urllib.parse
 import urllib.request
@@ -19,10 +18,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
+import duckdb
+
+from arcade_db import DEFAULT_DUCKDB, connect as duckdb_connect, execute_script, rows as duckdb_rows
 from arcade_query import fuzzy_score, normalize
 
 
-DEFAULT_DB = Path("aurcade_locations.sqlite")
+DEFAULT_DB = DEFAULT_DUCKDB
 NOMINATIM_URL = "https://nominatim.openstreetmap.org"
 USER_AGENT = "aurcade-local-verifier/0.1 (personal local data cleanup)"
 
@@ -39,46 +41,44 @@ class Candidate:
     raw: dict[str, Any]
 
 
-def connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+def connect(db_path: Path) -> duckdb.DuckDBPyConnection:
+    return duckdb_connect(db_path)
 
 
-def ensure_schema(conn: sqlite3.Connection) -> None:
-    conn.executescript(
+def ensure_schema(conn: duckdb.DuckDBPyConnection) -> None:
+    execute_script(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS location_verifications (
-            verification_id INTEGER PRIMARY KEY,
-            location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
-            checked_at TEXT NOT NULL,
-            provider TEXT NOT NULL,
-            status TEXT NOT NULL,
-            match_kind TEXT,
-            query TEXT,
-            matched_name TEXT,
-            matched_address TEXT,
-            matched_latitude REAL,
-            matched_longitude REAL,
-            distance_miles REAL,
-            confidence REAL,
-            evidence_url TEXT,
-            raw_json TEXT,
-            notes TEXT
+            verification_id BIGINT,
+            location_id BIGINT NOT NULL,
+            checked_at VARCHAR NOT NULL,
+            provider VARCHAR NOT NULL,
+            status VARCHAR NOT NULL,
+            match_kind VARCHAR,
+            query VARCHAR,
+            matched_name VARCHAR,
+            matched_address VARCHAR,
+            matched_latitude DOUBLE,
+            matched_longitude DOUBLE,
+            distance_miles DOUBLE,
+            confidence DOUBLE,
+            evidence_url VARCHAR,
+            raw_json VARCHAR,
+            notes VARCHAR
         );
 
         CREATE INDEX IF NOT EXISTS idx_location_verifications_location
             ON location_verifications(location_id, checked_at);
 
         CREATE TABLE IF NOT EXISTS location_statuses (
-            location_id INTEGER PRIMARY KEY REFERENCES locations(location_id) ON DELETE CASCADE,
-            status TEXT NOT NULL,
-            replacement_name TEXT,
-            confidence REAL,
-            verified_at TEXT NOT NULL,
-            evidence TEXT,
-            notes TEXT
+            location_id BIGINT,
+            status VARCHAR NOT NULL,
+            replacement_name VARCHAR,
+            confidence DOUBLE,
+            verified_at VARCHAR NOT NULL,
+            evidence VARCHAR,
+            notes VARCHAR
         );
         """
     )
@@ -129,7 +129,7 @@ def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float
     return radius_miles * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def candidate_from_item(location: sqlite3.Row, item: dict[str, Any], match_kind: str) -> Candidate:
+def candidate_from_item(location: dict[str, Any], item: dict[str, Any], match_kind: str) -> Candidate:
     lat = parse_float(item.get("lat"))
     lon = parse_float(item.get("lon"))
     distance = None
@@ -150,7 +150,7 @@ def candidate_from_item(location: sqlite3.Row, item: dict[str, Any], match_kind:
     return Candidate(match_kind, name, address, lat, lon, distance, round(confidence, 3), item)
 
 
-def classify(location: sqlite3.Row, candidate: Optional[Candidate]) -> tuple[str, str]:
+def classify(location: dict[str, Any], candidate: Optional[Candidate]) -> tuple[str, str]:
     if candidate is None:
         return "not_found", "No Nominatim result for name/address/reverse probes."
     name_score = fuzzy_score(location["name"], candidate.name or "")
@@ -164,7 +164,7 @@ def classify(location: sqlite3.Row, candidate: Optional[Candidate]) -> tuple[str
     return "not_found", "External result was weak or absent."
 
 
-def search_name_address(location: sqlite3.Row) -> tuple[str, list[dict[str, Any]]]:
+def search_name_address(location: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
     query = " ".join(
         str(location[key] or "")
         for key in ("name", "street_address", "city", "state", "postal_code")
@@ -183,7 +183,7 @@ def search_name_address(location: sqlite3.Row) -> tuple[str, list[dict[str, Any]
     )
 
 
-def search_address(location: sqlite3.Row) -> tuple[str, list[dict[str, Any]]]:
+def search_address(location: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
     query = " ".join(
         str(location[key] or "")
         for key in ("street_address", "city", "state", "postal_code")
@@ -202,7 +202,7 @@ def search_address(location: sqlite3.Row) -> tuple[str, list[dict[str, Any]]]:
     )
 
 
-def reverse_lookup(location: sqlite3.Row) -> tuple[str, list[dict[str, Any]]]:
+def reverse_lookup(location: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
     if location["latitude"] is None or location["longitude"] is None:
         return "", []
     query = f"{location['latitude']},{location['longitude']}"
@@ -220,7 +220,7 @@ def reverse_lookup(location: sqlite3.Row) -> tuple[str, list[dict[str, Any]]]:
     return query, [item] if isinstance(item, dict) and not item.get("error") else []
 
 
-def best_candidate(location: sqlite3.Row, delay_seconds: float) -> tuple[Optional[Candidate], str]:
+def best_candidate(location: dict[str, Any], delay_seconds: float) -> tuple[Optional[Candidate], str]:
     candidates: list[Candidate] = []
     query_parts: list[str] = []
     for match_kind, probe in (
@@ -248,26 +248,25 @@ def best_candidate(location: sqlite3.Row, delay_seconds: float) -> tuple[Optiona
 
 
 def locations_to_check(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     state: str,
     limit: int,
     min_game_count: int,
     location_ids: Iterable[int],
     include_inactive: bool,
-) -> list[sqlite3.Row]:
+) -> list[dict[str, Any]]:
     ids = list(location_ids)
     if ids:
         placeholders = ",".join("?" for _ in ids)
-        return list(
-            conn.execute(
-                f"""
-                SELECT *
-                FROM locations
-                WHERE location_id IN ({placeholders})
-                ORDER BY game_count DESC, name
-                """,
-                ids,
-            )
+        return duckdb_rows(
+            conn,
+            f"""
+            SELECT *
+            FROM locations
+            WHERE location_id IN ({placeholders})
+            ORDER BY game_count DESC, name
+            """,
+            ids,
         )
     inactive_filter = ""
     if not include_inactive:
@@ -279,25 +278,24 @@ def locations_to_check(
               AND ls.status IN ('closed', 'replaced')
         )
         """
-    return list(
-        conn.execute(
-            f"""
-            SELECT *
-            FROM locations
-            WHERE state = ?
-              AND COALESCE(game_count, 0) >= ?
-              {inactive_filter}
-            ORDER BY game_count DESC, name
-            LIMIT ?
-            """,
-            (state, min_game_count, limit),
-        )
+    return duckdb_rows(
+        conn,
+        f"""
+        SELECT *
+        FROM locations
+        WHERE state = ?
+          AND COALESCE(game_count, 0) >= ?
+          {inactive_filter}
+        ORDER BY game_count DESC, name
+        LIMIT ?
+        """,
+        (state, min_game_count, limit),
     )
 
 
 def record_verification(
-    conn: sqlite3.Connection,
-    location: sqlite3.Row,
+    conn: duckdb.DuckDBPyConnection,
+    location: dict[str, Any],
     status: str,
     notes: str,
     query: str,
@@ -305,16 +303,18 @@ def record_verification(
     checked_at: str,
     apply_status: bool,
 ) -> None:
+    verification_id = conn.execute("SELECT COALESCE(MAX(verification_id), 0) + 1 FROM location_verifications").fetchone()[0]
     conn.execute(
         """
         INSERT INTO location_verifications (
-            location_id, checked_at, provider, status, match_kind, query,
+            verification_id, location_id, checked_at, provider, status, match_kind, query,
             matched_name, matched_address, matched_latitude, matched_longitude,
             distance_miles, confidence, evidence_url, raw_json, notes
         )
-        VALUES (?, ?, 'nominatim', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, 'nominatim', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
+            verification_id,
             location["location_id"],
             checked_at,
             status,
@@ -332,28 +332,40 @@ def record_verification(
         ),
     )
     if apply_status and status in {"matched", "needs_review"}:
-        conn.execute(
-            """
-            INSERT INTO location_statuses (
-                location_id, status, replacement_name, confidence, verified_at, evidence, notes
-            )
-            VALUES (?, ?, NULL, ?, ?, 'nominatim', ?)
-            ON CONFLICT(location_id) DO UPDATE SET
-                status = excluded.status,
-                confidence = excluded.confidence,
-                verified_at = excluded.verified_at,
-                evidence = excluded.evidence,
-                notes = excluded.notes
-            WHERE location_statuses.status NOT IN ('closed', 'replaced')
-            """,
-            (
-                location["location_id"],
-                status,
-                candidate.confidence if candidate else None,
-                checked_at,
-                notes,
-            ),
+        existing = conn.execute(
+            "SELECT status FROM location_statuses WHERE location_id = ?",
+            (location["location_id"],),
+        ).fetchone()
+        values = (
+            location["location_id"],
+            status,
+            candidate.confidence if candidate else None,
+            checked_at,
+            notes,
         )
+        if existing is None:
+            conn.execute(
+                """
+                INSERT INTO location_statuses (
+                    location_id, status, replacement_name, confidence, verified_at, evidence, notes
+                )
+                VALUES (?, ?, NULL, ?, ?, 'nominatim', ?)
+                """,
+                values,
+            )
+        elif existing[0] not in ("closed", "replaced"):
+            conn.execute(
+                """
+                UPDATE location_statuses SET
+                    status = ?,
+                    confidence = ?,
+                    verified_at = ?,
+                    evidence = 'nominatim',
+                    notes = ?
+                WHERE location_id = ?
+                """,
+                (status, candidate.confidence if candidate else None, checked_at, notes, location["location_id"]),
+            )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -395,8 +407,6 @@ def main() -> int:
                 record_verification(conn, row, status, notes, query, candidate, checked_at, apply_status=True)
         if args.apply:
             conn.commit()
-        else:
-            conn.rollback()
     finally:
         conn.close()
     return 0

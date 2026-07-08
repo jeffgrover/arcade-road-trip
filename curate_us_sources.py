@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Coordinate conservative national source curation.
 
-Dry-run is the default. Apply mode backs up the SQLite database, links only
+Dry-run is the default. Apply mode backs up the DuckDB database, links only
 high-confidence source matches, imports clear source-only rows, and writes
 review reports for ambiguous records.
 """
@@ -10,12 +10,15 @@ from __future__ import annotations
 
 import argparse
 import csv
-import sqlite3
+import shutil
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+import duckdb
+
+from arcade_db import DEFAULT_DUCKDB
 from import_pinballmap_api import (
     bundle_from_region_payloads,
     fetch_location_types,
@@ -49,7 +52,7 @@ from validate_ziv_locations import (
 )
 
 
-DEFAULT_DB = Path("aurcade_locations.sqlite")
+DEFAULT_DB = DEFAULT_DUCKDB
 DEFAULT_REPORT_DIR = Path("reports")
 PINBALLMAP_AMBIGUOUS_THRESHOLD = 0.65
 
@@ -91,15 +94,7 @@ class PinballMapPossible:
 def backup_database(db_path: Path) -> Path:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = db_path.with_name(f"{db_path.stem}.backup_{stamp}{db_path.suffix}")
-    source = sqlite3.connect(db_path)
-    try:
-        dest = sqlite3.connect(backup_path)
-        try:
-            source.backup(dest)
-        finally:
-            dest.close()
-    finally:
-        source.close()
+    shutil.copy2(db_path, backup_path)
     return backup_path
 
 
@@ -149,7 +144,7 @@ def write_ziv_unmatched_report(report_dir: Path, ziv_arcades, matches: list[Matc
 
 
 def pinballmap_possible_matches(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     bundle: ImportBundle,
     location_match_threshold: float,
 ) -> list[PinballMapPossible]:
@@ -205,7 +200,7 @@ def write_pinballmap_possible_report(report_dir: Path, possibles: list[PinballMa
 
 def write_quality_report(
     report_dir: Path,
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     states: list[str],
     ziv_matches: list[Match],
     pinballmap_bundle: ImportBundle | None,
@@ -294,7 +289,7 @@ def main() -> int:
     try:
         progress(f"starting national source curation mode={'apply' if args.apply else 'dry-run'} states={','.join(states)}")
         if args.apply and not args.skip_backup:
-            progress(f"creating SQLite backup for {args.db}")
+            progress(f"creating DuckDB backup for {args.db}")
             backup_path = backup_database(args.db)
             progress(f"backup created: {backup_path}")
 
@@ -312,7 +307,7 @@ def main() -> int:
                 progress("fetching ZIv U.S. arcade cache/API data")
                 all_ziv = [ziv for ziv in fetch_ziv_us_arcades(args.ziv_cache, args.cache_hours) if ziv.state in states]
                 progress(f"ZIv source locations in selected states: {len(all_ziv)}")
-                locals_ = [local for local in load_local_locations(conn, include_inactive=False) if local.state in states]
+                locals_ = load_local_locations(conn, include_inactive=False, states=states)
                 progress(f"local active locations in selected states: {len(locals_)}")
                 ziv_matches = best_matches(all_ziv, locals_)
                 high_matches = [match for match in ziv_matches if match.confidence >= 0.84]

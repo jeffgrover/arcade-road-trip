@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sqlite3
 import time
 import urllib.parse
 import urllib.request
@@ -19,6 +18,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+import duckdb
+
+from arcade_db import DEFAULT_DUCKDB, has_table
 from validate_ziv_locations import (
     USER_AGENT,
     ZIV_API,
@@ -32,7 +34,7 @@ from validate_ziv_locations import (
 from us_states import add_state_selection_args, selected_states
 
 
-DEFAULT_DB = Path("aurcade_locations.sqlite")
+DEFAULT_DB = DEFAULT_DUCKDB
 DEFAULT_CACHE = Path("ziv_us_arcades_cache.json")
 ZIV_ID_OFFSET = 2_000_000_000
 ZIV_SOURCE_URL = "https://zenius-i-vanisher.com/v5.2/arcade.php?id={ziv_id}"
@@ -120,19 +122,17 @@ def fetch_ziv_detail(ziv: ZivArcade) -> ZivDetail:
     return ZivDetail(arcade=ziv, machines=machines, raw=row)
 
 
-def existing_ziv_links(conn: sqlite3.Connection) -> set[int]:
-    if not conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='ziv_location_links'"
-    ).fetchone():
+def existing_ziv_links(conn: duckdb.DuckDBPyConnection) -> set[int]:
+    if not has_table(conn, "ziv_location_links"):
         return set()
     return {
-        int(row["ziv_location_id"])
-        for row in conn.execute("SELECT ziv_location_id FROM ziv_location_links")
+        int(row[0])
+        for row in conn.execute("SELECT ziv_location_id FROM ziv_location_links").fetchall()
     }
 
 
 def build_plan(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     state: str,
     cache: Path,
     cache_hours: float,
@@ -175,23 +175,24 @@ def build_plan(
     )
 
 
-def upsert_override_links(conn: sqlite3.Connection, plan: ImportPlan, checked_at: str) -> None:
-    conn.executemany(
-        """
-        INSERT INTO ziv_location_links (
-            location_id, ziv_location_id, confidence, method, linked_at
+def upsert_override_links(conn: duckdb.DuckDBPyConnection, plan: ImportPlan, checked_at: str) -> None:
+    for ziv_id, location_id in plan.override_links.items():
+        conn.execute(
+            "DELETE FROM ziv_location_links WHERE location_id = ? AND ziv_location_id = ?",
+            (location_id, ziv_id),
         )
-        VALUES (?, ?, 1.0, 'manual_override', ?)
-        ON CONFLICT(location_id, ziv_location_id) DO UPDATE SET
-            confidence = excluded.confidence,
-            method = excluded.method,
-            linked_at = excluded.linked_at
-        """,
-        [(location_id, ziv_id, checked_at) for ziv_id, location_id in plan.override_links.items()],
-    )
+        conn.execute(
+            """
+            INSERT INTO ziv_location_links (
+                location_id, ziv_location_id, confidence, method, linked_at
+            )
+            VALUES (?, ?, 1.0, 'manual_override', ?)
+            """,
+            (location_id, ziv_id, checked_at),
+        )
 
 
-def insert_locations(conn: sqlite3.Connection, plan: ImportPlan, checked_at: str) -> None:
+def insert_locations(conn: duckdb.DuckDBPyConnection, plan: ImportPlan, checked_at: str) -> None:
     location_rows = []
     link_rows = []
     verification_rows = []
@@ -267,75 +268,94 @@ def insert_locations(conn: sqlite3.Connection, plan: ImportPlan, checked_at: str
                 )
             )
 
-    conn.executemany(
-        """
-        INSERT INTO locations (
-            location_id, name, type, city, state, street_address, postal_code,
-            phone, address_text, website_url, is_public, game_count,
-            unique_game_count, world_record_count, updated_text, description,
-            latitude, longitude, detail_fetched_at, source_url
+    for row in location_rows:
+        if conn.execute("SELECT 1 FROM locations WHERE location_id = ?", (row[0],)).fetchone():
+            conn.execute(
+                """
+                UPDATE locations SET
+                    name = ?,
+                    type = ?,
+                    city = ?,
+                    state = ?,
+                    street_address = ?,
+                    postal_code = ?,
+                    phone = ?,
+                    address_text = ?,
+                    website_url = ?,
+                    is_public = ?,
+                    game_count = ?,
+                    unique_game_count = ?,
+                    world_record_count = ?,
+                    updated_text = ?,
+                    description = ?,
+                    latitude = ?,
+                    longitude = ?,
+                    detail_fetched_at = ?,
+                    source_url = ?
+                WHERE location_id = ?
+                """,
+                (*row[1:], row[0]),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO locations (
+                    location_id, name, type, city, state, street_address, postal_code,
+                    phone, address_text, website_url, is_public, game_count,
+                    unique_game_count, world_record_count, updated_text, description,
+                    latitude, longitude, detail_fetched_at, source_url
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                row,
+            )
+    for row in link_rows:
+        conn.execute(
+            "DELETE FROM ziv_location_links WHERE location_id = ? AND ziv_location_id = ?",
+            row[:2],
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(location_id) DO UPDATE SET
-            name = excluded.name,
-            type = excluded.type,
-            city = excluded.city,
-            state = excluded.state,
-            street_address = excluded.street_address,
-            postal_code = excluded.postal_code,
-            phone = excluded.phone,
-            address_text = excluded.address_text,
-            website_url = excluded.website_url,
-            is_public = excluded.is_public,
-            game_count = excluded.game_count,
-            unique_game_count = excluded.unique_game_count,
-            updated_text = excluded.updated_text,
-            description = excluded.description,
-            latitude = excluded.latitude,
-            longitude = excluded.longitude,
-            detail_fetched_at = excluded.detail_fetched_at,
-            source_url = excluded.source_url
-        """,
-        location_rows,
-    )
-    conn.executemany(
-        """
-        INSERT INTO ziv_location_links (
-            location_id, ziv_location_id, confidence, method, linked_at
+        conn.execute(
+            """
+            INSERT INTO ziv_location_links (
+                location_id, ziv_location_id, confidence, method, linked_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            row,
         )
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(location_id, ziv_location_id) DO UPDATE SET
-            confidence = excluded.confidence,
-            method = excluded.method,
-            linked_at = excluded.linked_at
-        """,
-        link_rows,
-    )
-    conn.executemany(
-        """
-        INSERT INTO games (game_id, name, manufacturer)
-        VALUES (?, ?, NULL)
-        ON CONFLICT(game_id) DO UPDATE SET
-            name = excluded.name
-        """,
-        list(game_rows.values()),
-    )
-    conn.executemany(
-        """
-        INSERT INTO location_games (
-            location_id, game_id, cabinet_type, year, players,
-            controls_condition, screen_condition, cabinet_condition, fetched_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(location_id, game_id) DO UPDATE SET
-            cabinet_type = excluded.cabinet_type,
-            controls_condition = excluded.controls_condition,
-            screen_condition = excluded.screen_condition,
-            cabinet_condition = excluded.cabinet_condition,
-            fetched_at = excluded.fetched_at
-        """,
-        location_game_rows,
-    )
+    for row in game_rows.values():
+        if conn.execute("SELECT 1 FROM games WHERE game_id = ?", (row[0],)).fetchone():
+            conn.execute("UPDATE games SET name = ? WHERE game_id = ?", (row[1], row[0]))
+        else:
+            conn.execute("INSERT INTO games (game_id, name, manufacturer) VALUES (?, ?, NULL)", row)
+    for row in location_game_rows:
+        if conn.execute(
+            "SELECT 1 FROM location_games WHERE location_id = ? AND game_id = ?",
+            row[:2],
+        ).fetchone():
+            conn.execute(
+                """
+                UPDATE location_games SET
+                    cabinet_type = ?,
+                    controls_condition = ?,
+                    screen_condition = ?,
+                    cabinet_condition = ?,
+                    fetched_at = ?
+                WHERE location_id = ? AND game_id = ?
+                """,
+                (row[2], row[5], row[6], row[7], row[8], row[0], row[1]),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO location_games (
+                    location_id, game_id, cabinet_type, year, players,
+                    controls_condition, screen_condition, cabinet_condition, fetched_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                row,
+            )
     conn.executemany(
         """
         INSERT INTO location_verifications (

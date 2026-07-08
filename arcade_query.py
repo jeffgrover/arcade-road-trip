@@ -722,9 +722,8 @@ def verify_locations_for_result(
         return False, []
     if args.db.suffix == ".duckdb":
         raise RuntimeError(
-            "lazy OSM verification still writes through the legacy SQLite verifier; "
-            "run sync_arcade_data.py validation or port verify_locations_osm.py before "
-            "using --verify-missing/--verify-stale-days against DuckDB"
+            "lazy OSM verification is disabled for DuckDB query sessions; "
+            "run sync_arcade_data.py validation with --include-osm-validation instead"
         )
     location_ids = extract_location_ids(result)
     if args.verify_limit is not None:

@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sqlite3
 import time
 import urllib.request
 from dataclasses import dataclass
@@ -18,6 +17,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+import duckdb
+
+from arcade_db import DEFAULT_DUCKDB, connect as duckdb_connect, execute_script, rows as duckdb_rows
 from import_pinballmap_locations import (
     LOCATION_ID_OVERRIDES,
     best_location_match,
@@ -27,7 +29,7 @@ from import_pinballmap_locations import (
 )
 
 
-DEFAULT_DB = Path("aurcade_locations.sqlite")
+DEFAULT_DB = DEFAULT_DUCKDB
 DEFAULT_CSV = Path("location_2026-07-05_15h22m53.csv")
 PINBALLMAP_API = "https://pinballmap.com/api/v1/locations/{pinballmap_id}.json"
 PINBALLMAP_URL_RE = re.compile(r"by_location_id=(\d+)")
@@ -42,56 +44,52 @@ class PinballMapLink:
     method: str
 
 
-def connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA busy_timeout = 10000")
-    return conn
+def connect(db_path: Path) -> duckdb.DuckDBPyConnection:
+    return duckdb_connect(db_path)
 
 
-def ensure_schema(conn: sqlite3.Connection) -> None:
-    conn.executescript(
+def ensure_schema(conn: duckdb.DuckDBPyConnection) -> None:
+    execute_script(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS pinballmap_location_links (
-            location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
-            pinballmap_location_id INTEGER NOT NULL,
-            confidence REAL NOT NULL,
-            method TEXT NOT NULL,
-            linked_at TEXT NOT NULL,
-            PRIMARY KEY (location_id, pinballmap_location_id)
+            location_id BIGINT NOT NULL,
+            pinballmap_location_id BIGINT NOT NULL,
+            confidence DOUBLE NOT NULL,
+            method VARCHAR NOT NULL,
+            linked_at VARCHAR NOT NULL
         );
 
         CREATE INDEX IF NOT EXISTS idx_pinballmap_location_links_pinballmap
             ON pinballmap_location_links(pinballmap_location_id);
 
         CREATE TABLE IF NOT EXISTS location_verifications (
-            verification_id INTEGER PRIMARY KEY,
-            location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
-            checked_at TEXT NOT NULL,
-            provider TEXT NOT NULL,
-            status TEXT NOT NULL,
-            match_kind TEXT,
-            query TEXT,
-            matched_name TEXT,
-            matched_address TEXT,
-            matched_latitude REAL,
-            matched_longitude REAL,
-            distance_miles REAL,
-            confidence REAL,
-            evidence_url TEXT,
-            raw_json TEXT,
-            notes TEXT
+            verification_id BIGINT,
+            location_id BIGINT NOT NULL,
+            checked_at VARCHAR NOT NULL,
+            provider VARCHAR NOT NULL,
+            status VARCHAR NOT NULL,
+            match_kind VARCHAR,
+            query VARCHAR,
+            matched_name VARCHAR,
+            matched_address VARCHAR,
+            matched_latitude DOUBLE,
+            matched_longitude DOUBLE,
+            distance_miles DOUBLE,
+            confidence DOUBLE,
+            evidence_url VARCHAR,
+            raw_json VARCHAR,
+            notes VARCHAR
         );
 
         CREATE TABLE IF NOT EXISTS location_statuses (
-            location_id INTEGER PRIMARY KEY REFERENCES locations(location_id) ON DELETE CASCADE,
-            status TEXT NOT NULL,
-            replacement_name TEXT,
-            confidence REAL,
-            verified_at TEXT NOT NULL,
-            evidence TEXT,
-            notes TEXT
+            location_id BIGINT,
+            status VARCHAR NOT NULL,
+            replacement_name VARCHAR,
+            confidence DOUBLE,
+            verified_at VARCHAR NOT NULL,
+            evidence VARCHAR,
+            notes VARCHAR
         );
         """
     )
@@ -106,9 +104,9 @@ def pinballmap_id_from_url(source_url: Optional[str]) -> Optional[int]:
     return int(match.group(1))
 
 
-def discover_links(conn: sqlite3.Connection, csv_path: Optional[Path]) -> list[PinballMapLink]:
+def discover_links(conn: duckdb.DuckDBPyConnection, csv_path: Optional[Path]) -> list[PinballMapLink]:
     links: dict[tuple[int, int], PinballMapLink] = {}
-    for row in conn.execute("SELECT location_id, source_url FROM locations"):
+    for row in duckdb_rows(conn, "SELECT location_id, source_url FROM locations"):
         pinballmap_id = pinballmap_id_from_url(row["source_url"])
         if pinballmap_id is not None:
             link = PinballMapLink(row["location_id"], pinballmap_id, 1.0, "source_url")
@@ -139,29 +137,22 @@ def discover_links(conn: sqlite3.Connection, csv_path: Optional[Path]) -> list[P
     return sorted(links.values(), key=lambda link: (link.location_id, link.pinballmap_location_id))
 
 
-def upsert_links(conn: sqlite3.Connection, links: list[PinballMapLink], linked_at: str) -> None:
-    conn.executemany(
-        """
-        INSERT INTO pinballmap_location_links (
-            location_id, pinballmap_location_id, confidence, method, linked_at
+def upsert_links(conn: duckdb.DuckDBPyConnection, links: list[PinballMapLink], linked_at: str) -> None:
+    for link in links:
+        row = (link.location_id, link.pinballmap_location_id, link.confidence, link.method, linked_at)
+        conn.execute(
+            "DELETE FROM pinballmap_location_links WHERE location_id = ? AND pinballmap_location_id = ?",
+            row[:2],
         )
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(location_id, pinballmap_location_id) DO UPDATE SET
-            confidence = excluded.confidence,
-            method = excluded.method,
-            linked_at = excluded.linked_at
-        """,
-        [
-            (
-                link.location_id,
-                link.pinballmap_location_id,
-                link.confidence,
-                link.method,
-                linked_at,
+        conn.execute(
+            """
+            INSERT INTO pinballmap_location_links (
+                location_id, pinballmap_location_id, confidence, method, linked_at
             )
-            for link in links
-        ],
-    )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            row,
+        )
 
 
 def fetch_pinballmap_location(pinballmap_id: int) -> tuple[Optional[dict[str, Any]], Optional[str]]:
@@ -201,7 +192,7 @@ def classify_pinballmap(data: Optional[dict[str, Any]], error: Optional[str]) ->
 
 
 def record_validation(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     location_id: int,
     pinballmap_id: int,
     data: Optional[dict[str, Any]],
@@ -226,16 +217,18 @@ def record_validation(
             lon = float(data["lon"]) if data.get("lon") is not None else None
         except (TypeError, ValueError):
             lat = lon = None
+    verification_id = conn.execute("SELECT COALESCE(MAX(verification_id), 0) + 1 FROM location_verifications").fetchone()[0]
     conn.execute(
         """
         INSERT INTO location_verifications (
-            location_id, checked_at, provider, status, match_kind, query,
+            verification_id, location_id, checked_at, provider, status, match_kind, query,
             matched_name, matched_address, matched_latitude, matched_longitude,
             distance_miles, confidence, evidence_url, raw_json, notes
         )
-        VALUES (?, ?, 'pinballmap', ?, 'pinballmap_location_id', ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
+        VALUES (?, ?, ?, 'pinballmap', ?, 'pinballmap_location_id', ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
         """,
         (
+            verification_id,
             location_id,
             checked_at,
             status,
@@ -251,31 +244,42 @@ def record_validation(
         ),
     )
     if apply_status and status == "fresh_pinballmap":
-        conn.execute(
-            """
-            INSERT INTO location_statuses (
-                location_id, status, replacement_name, confidence, verified_at, evidence, notes
+        existing = conn.execute(
+            "SELECT status FROM location_statuses WHERE location_id = ?",
+            (location_id,),
+        ).fetchone()
+        if existing is None:
+            conn.execute(
+                """
+                INSERT INTO location_statuses (
+                    location_id, status, replacement_name, confidence, verified_at, evidence, notes
+                )
+                VALUES (?, 'matched', NULL, ?, ?, 'pinballmap', ?)
+                """,
+                (location_id, confidence, checked_at, notes),
             )
-            VALUES (?, 'matched', NULL, ?, ?, 'pinballmap', ?)
-            ON CONFLICT(location_id) DO UPDATE SET
-                status = excluded.status,
-                confidence = excluded.confidence,
-                verified_at = excluded.verified_at,
-                evidence = excluded.evidence,
-                notes = excluded.notes
-            WHERE location_statuses.status NOT IN ('closed', 'replaced')
-            """,
-            (location_id, confidence, checked_at, notes),
-        )
+        elif existing[0] not in ("closed", "replaced"):
+            conn.execute(
+                """
+                UPDATE location_statuses SET
+                    status = 'matched',
+                    confidence = ?,
+                    verified_at = ?,
+                    evidence = 'pinballmap',
+                    notes = ?
+                WHERE location_id = ?
+                """,
+                (confidence, checked_at, notes, location_id),
+            )
 
 
 def links_to_validate(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     location_ids: list[int],
     state: Optional[str],
     limit: Optional[int],
     include_inactive: bool,
-) -> list[sqlite3.Row]:
+) -> list[dict[str, Any]]:
     clauses = []
     params: list[Any] = []
     if location_ids:
@@ -299,7 +303,7 @@ def links_to_validate(
     if limit is not None:
         sql += " LIMIT ?"
         params.append(limit)
-    return list(conn.execute(sql, params))
+    return duckdb_rows(conn, sql, params)
 
 
 def build_parser() -> argparse.ArgumentParser:

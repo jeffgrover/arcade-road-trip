@@ -12,7 +12,6 @@ import argparse
 import json
 import math
 import re
-import sqlite3
 import time
 import urllib.parse
 import urllib.request
@@ -22,8 +21,13 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
+import duckdb
 
-DEFAULT_DB = Path("aurcade_locations.sqlite")
+from arcade_db import DEFAULT_DUCKDB, connect as duckdb_connect, execute_script, rows as duckdb_rows
+from us_states import add_state_selection_args, selected_states
+
+
+DEFAULT_DB = DEFAULT_DUCKDB
 ZIV_API = "https://zenius-i-vanisher.com/api/arcades.php"
 ZIV_ARCADE_URL = "https://zenius-i-vanisher.com/v5.2/arcade.php?id={ziv_id}"
 USER_AGENT = "aurcade-ziv-validator/0.1 (personal local data cleanup)"
@@ -164,46 +168,42 @@ class Match:
     address_score: float
 
 
-def connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA busy_timeout = 10000")
-    return conn
+def connect(db_path: Path) -> duckdb.DuckDBPyConnection:
+    return duckdb_connect(db_path)
 
 
-def ensure_schema(conn: sqlite3.Connection) -> None:
-    conn.executescript(
+def ensure_schema(conn: duckdb.DuckDBPyConnection) -> None:
+    execute_script(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS ziv_location_links (
-            location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
-            ziv_location_id INTEGER NOT NULL,
-            confidence REAL NOT NULL,
-            method TEXT NOT NULL,
-            linked_at TEXT NOT NULL,
-            PRIMARY KEY (location_id, ziv_location_id)
+            location_id BIGINT NOT NULL,
+            ziv_location_id BIGINT NOT NULL,
+            confidence DOUBLE NOT NULL,
+            method VARCHAR NOT NULL,
+            linked_at VARCHAR NOT NULL
         );
 
         CREATE INDEX IF NOT EXISTS idx_ziv_location_links_ziv
             ON ziv_location_links(ziv_location_id);
 
         CREATE TABLE IF NOT EXISTS location_verifications (
-            verification_id INTEGER PRIMARY KEY,
-            location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
-            checked_at TEXT NOT NULL,
-            provider TEXT NOT NULL,
-            status TEXT NOT NULL,
-            match_kind TEXT,
-            query TEXT,
-            matched_name TEXT,
-            matched_address TEXT,
-            matched_latitude REAL,
-            matched_longitude REAL,
-            distance_miles REAL,
-            confidence REAL,
-            evidence_url TEXT,
-            raw_json TEXT,
-            notes TEXT
+            verification_id BIGINT,
+            location_id BIGINT NOT NULL,
+            checked_at VARCHAR NOT NULL,
+            provider VARCHAR NOT NULL,
+            status VARCHAR NOT NULL,
+            match_kind VARCHAR,
+            query VARCHAR,
+            matched_name VARCHAR,
+            matched_address VARCHAR,
+            matched_latitude DOUBLE,
+            matched_longitude DOUBLE,
+            distance_miles DOUBLE,
+            confidence DOUBLE,
+            evidence_url VARCHAR,
+            raw_json VARCHAR,
+            notes VARCHAR
         );
         """
     )
@@ -326,9 +326,15 @@ def parse_ziv_arcades(data: dict[str, Any]) -> list[ZivArcade]:
     return arcades
 
 
-def load_local_locations(conn: sqlite3.Connection, include_inactive: bool) -> list[LocalLocation]:
+def load_local_locations(
+    conn: duckdb.DuckDBPyConnection,
+    include_inactive: bool,
+    states: Optional[list[str]] = None,
+) -> list[LocalLocation]:
     status_filter = "" if include_inactive else "AND COALESCE(ls.status, 'active') NOT IN ('closed', 'replaced')"
-    rows = conn.execute(
+    states = states or list(US_STATES)
+    query_rows = duckdb_rows(
+        conn,
         f"""
         SELECT l.location_id, l.name, l.city, l.state, l.street_address,
                l.postal_code, l.latitude, l.longitude, COALESCE(ls.status, 'active') AS status,
@@ -336,11 +342,12 @@ def load_local_locations(conn: sqlite3.Connection, include_inactive: bool) -> li
         FROM locations l
         LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
         LEFT JOIN location_games lg ON lg.location_id = l.location_id
-        WHERE l.state IN ({",".join("?" for _ in US_STATES)}) {status_filter}
-        GROUP BY l.location_id
+        WHERE l.state IN ({",".join("?" for _ in states)}) {status_filter}
+        GROUP BY l.location_id, l.name, l.city, l.state, l.street_address,
+                 l.postal_code, l.latitude, l.longitude, COALESCE(ls.status, 'active')
         """,
-        list(US_STATES),
-    ).fetchall()
+        states,
+    )
     return [
         LocalLocation(
             location_id=row["location_id"],
@@ -354,7 +361,7 @@ def load_local_locations(conn: sqlite3.Connection, include_inactive: bool) -> li
             status=row["status"],
             game_count=int(row["game_count"] or 0),
         )
-        for row in rows
+        for row in query_rows
     ]
 
 
@@ -430,45 +437,39 @@ def best_matches(ziv_arcades: Iterable[ZivArcade], locals_: Iterable[LocalLocati
     return sorted(chosen, key=lambda match: (match.local.state, match.local.city, match.local.name))
 
 
-def upsert_links(conn: sqlite3.Connection, matches: list[Match], checked_at: str) -> None:
-    conn.executemany(
-        """
-        INSERT INTO ziv_location_links (
-            location_id, ziv_location_id, confidence, method, linked_at
+def upsert_links(conn: duckdb.DuckDBPyConnection, matches: list[Match], checked_at: str) -> None:
+    for match in matches:
+        row = (match.local.location_id, match.ziv.ziv_id, match.confidence, match.method, checked_at)
+        conn.execute(
+            "DELETE FROM ziv_location_links WHERE location_id = ? AND ziv_location_id = ?",
+            row[:2],
         )
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(location_id, ziv_location_id) DO UPDATE SET
-            confidence = excluded.confidence,
-            method = excluded.method,
-            linked_at = excluded.linked_at
-        """,
-        [
-            (
-                match.local.location_id,
-                match.ziv.ziv_id,
-                match.confidence,
-                match.method,
-                checked_at,
+        conn.execute(
+            """
+            INSERT INTO ziv_location_links (
+                location_id, ziv_location_id, confidence, method, linked_at
             )
-            for match in matches
-        ],
-    )
-
-
-def insert_verifications(conn: sqlite3.Connection, matches: list[Match], checked_at: str) -> None:
-    conn.executemany(
-        """
-        INSERT INTO location_verifications (
-            location_id, checked_at, provider, status, match_kind, query,
-            matched_name, matched_address, matched_latitude, matched_longitude,
-            distance_miles, confidence, evidence_url, raw_json, notes
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            row,
         )
-        VALUES (?, ?, 'ziv', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        [
+
+
+def next_verification_id(conn: duckdb.DuckDBPyConnection) -> int:
+    value = conn.execute("SELECT COALESCE(MAX(verification_id), 0) + 1 FROM location_verifications").fetchone()[0]
+    return int(value)
+
+
+def insert_verifications(conn: duckdb.DuckDBPyConnection, matches: list[Match], checked_at: str) -> None:
+    verification_id = next_verification_id(conn)
+    rows = []
+    for match in matches:
+        rows.append(
             (
+                verification_id,
                 match.local.location_id,
                 checked_at,
+                "ziv",
                 "ziv_matched" if match.confidence >= 0.84 else "ziv_possible_match",
                 match.method,
                 str(match.ziv.ziv_id),
@@ -486,8 +487,18 @@ def insert_verifications(conn: sqlite3.Connection, matches: list[Match], checked
                     "ZIv confirms arcade/community catalog presence, not general business status."
                 ),
             )
-            for match in matches
-        ],
+        )
+        verification_id += 1
+    conn.executemany(
+        """
+        INSERT INTO location_verifications (
+            verification_id, location_id, checked_at, provider, status, match_kind, query,
+            matched_name, matched_address, matched_latitude, matched_longitude,
+            distance_miles, confidence, evidence_url, raw_json, notes
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        rows,
     )
 
 
@@ -545,6 +556,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--cache", type=Path, default=Path("ziv_us_arcades_cache.json"))
     parser.add_argument("--cache-hours", type=float, default=24.0)
+    add_state_selection_args(parser, default_state="UT")
     parser.add_argument("--include-inactive", action="store_true")
     parser.add_argument("--limit", type=int, default=40)
     parser.add_argument("--apply", action="store_true")
@@ -554,11 +566,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     checked_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    ziv_arcades = fetch_ziv_us_arcades(args.cache, args.cache_hours)
+    states = selected_states(args)
+    ziv_arcades = [ziv for ziv in fetch_ziv_us_arcades(args.cache, args.cache_hours) if ziv.state in states]
     conn = connect(args.db)
     try:
         ensure_schema(conn)
-        locals_ = load_local_locations(conn, args.include_inactive)
+        locals_ = load_local_locations(conn, args.include_inactive, states)
         matches = best_matches(ziv_arcades, locals_)
         if args.apply:
             high_matches = [match for match in matches if match.confidence >= 0.84]
