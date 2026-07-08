@@ -46,6 +46,8 @@ Public GitHub Pages URL:
   and embedded Parquet data.
 - `verify_locations_osm.py`: OpenStreetMap/Nominatim verification probe that
   records evidence in sidecar tables.
+- `scan_google_maps_closures.py`: explicit slow Google Maps URL closure probe
+  for review-led status curation.
 - `validate_pinballmap_locations.py`: Pinball Map API validation for locations
   that have a known Pinball Map id.
 - `validate_ziv_locations.py`: Zenius -I- vanisher validation for U.S.
@@ -80,6 +82,8 @@ schema stays intact:
 - `location_statuses`: current curated status used by `arcade_query.py`.
   Locations with `closed` or `replaced` status are excluded by default from
   canned query commands.
+- Active/inactive status vocabulary is centralized in `arcade_db.py`; UI data
+  builders and CLI queries should import it rather than redefining it.
 - `pinballmap_location_links`: local location id to Pinball Map location id
   links discovered from source URLs, manual overrides, and optional local CSV
   imports.
@@ -148,13 +152,25 @@ slow and network-heavy:
 .venv/bin/python sync_arcade_data.py --include-aurcade-scrape --aurcade-index-only --plan-only
 ```
 
+Google Maps closure scanning is also explicit and not part of the normal sync
+pipeline. It opens one official Maps search URL per location, reads multiple
+rendered page signals for explicit closure labels, and only writes
+evidence/status rows with `--apply`. Default automatic scans wait a random
+45-150 seconds between requests:
+
+```bash
+.venv/bin/python -m playwright install chromium
+.venv/bin/python scan_google_maps_closures.py --sample
+.venv/bin/python scan_google_maps_closures.py --loop --max-runtime-minutes 240 --apply
+```
+
 ## Verification
 
 Run these after code or database changes:
 
 ```bash
 .venv/bin/python -m unittest discover -s tests
-.venv/bin/python -m py_compile arcade_db.py arcade_query.py canonicalize_games.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scrape_aurcade_locations.py curate_us_sources.py us_states.py sync_arcade_data.py maintain_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
+.venv/bin/python -m py_compile arcade_db.py arcade_query.py canonicalize_games.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scan_google_maps_closures.py scrape_aurcade_locations.py curate_us_sources.py us_states.py sync_arcade_data.py maintain_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
 .venv/bin/python arcade_query.py summary
 ```
 

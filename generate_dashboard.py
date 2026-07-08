@@ -16,12 +16,13 @@ from typing import Any, Iterable
 
 import duckdb
 
+from arcade_db import ACTIVE_LOCATION_STATUSES
 from us_states import CONTINENTAL_US_STATES, US_STATES
 
 
 DEFAULT_DB = Path("arcade_roadtrip.duckdb")
 DEFAULT_OUTPUT = Path("static/dashboard.html")
-ACTIVE_STATUSES = ("active", "unverified", "uncertain", "matched", "needs_review")
+ACTIVE_STATUSES = ACTIVE_LOCATION_STATUSES
 MIN_LAT = 24.396308
 MAX_LAT = 49.384358
 MIN_LON = -124.848974

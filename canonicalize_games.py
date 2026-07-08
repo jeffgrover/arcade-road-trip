@@ -14,12 +14,12 @@ from typing import Iterable, Optional
 
 import duckdb
 
-from arcade_db import DEFAULT_DUCKDB, connect, execute_script, rows
+from arcade_db import ACTIVE_LOCATION_STATUSES, DEFAULT_DUCKDB, connect, execute_script, rows
 
 
 DEFAULT_DB = DEFAULT_DUCKDB
 REPORTS_DIR = Path("reports")
-ACTIVE_STATUSES = ("active", "unverified", "uncertain", "matched", "needs_review")
+ACTIVE_STATUSES = ACTIVE_LOCATION_STATUSES
 AUTO_THRESHOLD = 0.995
 REVIEW_THRESHOLD = 0.90
 EDITION_WORDS = {

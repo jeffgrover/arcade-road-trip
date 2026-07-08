@@ -22,12 +22,17 @@ from typing import Any, Optional, Sequence
 
 import duckdb
 
-from arcade_db import DEFAULT_DUCKDB, connect as duckdb_connect, has_table as duckdb_has_table
+from arcade_db import (
+    ACTIVE_LOCATION_STATUSES,
+    DEFAULT_DUCKDB,
+    connect as duckdb_connect,
+    has_table as duckdb_has_table,
+)
 
 
 DEFAULT_DB = DEFAULT_DUCKDB
 DEFAULT_LIMIT = 25
-ACTIVE_STATUSES = ("active", "unverified", "uncertain", "matched", "needs_review")
+ACTIVE_STATUSES = ACTIVE_LOCATION_STATUSES
 LOCATION_ID_PATTERN = re.compile(r"\((-?\d+)\)")
 
 

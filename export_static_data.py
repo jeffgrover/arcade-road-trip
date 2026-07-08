@@ -15,12 +15,13 @@ from typing import Any, Iterable
 
 import duckdb
 
+from arcade_db import ACTIVE_LOCATION_STATUSES
 from us_states import CONTINENTAL_US_STATES
 
 
 DEFAULT_DB = Path("arcade_roadtrip.duckdb")
 DEFAULT_OUTPUT_DIR = Path("static/data")
-ACTIVE_STATUSES = ("active", "unverified", "uncertain", "matched", "needs_review")
+ACTIVE_STATUSES = ACTIVE_LOCATION_STATUSES
 
 
 def connect(db_path: Path) -> duckdb.DuckDBPyConnection:

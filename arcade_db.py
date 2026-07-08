@@ -9,6 +9,8 @@ import duckdb
 
 
 DEFAULT_DUCKDB = Path("arcade_roadtrip.duckdb")
+ACTIVE_LOCATION_STATUSES = ("active", "unverified", "uncertain", "matched", "needs_review")
+INACTIVE_LOCATION_STATUSES = ("closed", "replaced")
 
 
 def connect(db_path: Path = DEFAULT_DUCKDB, read_only: bool = False) -> duckdb.DuckDBPyConnection:
@@ -34,3 +36,23 @@ def execute_script(conn: duckdb.DuckDBPyConnection, script: str) -> None:
         statement = statement.strip()
         if statement:
             conn.execute(statement)
+
+
+def placeholders(values: Iterable[Any]) -> str:
+    return ",".join("?" for _ in values)
+
+
+def active_location_status_clause(status_sql: str = "COALESCE(ls.status, 'active')") -> str:
+    return f"{status_sql} IN ({placeholders(ACTIVE_LOCATION_STATUSES)})"
+
+
+def inactive_location_status_clause(status_sql: str = "COALESCE(ls.status, 'active')") -> str:
+    return f"{status_sql} IN ({placeholders(INACTIVE_LOCATION_STATUSES)})"
+
+
+def active_location_status_params() -> tuple[str, ...]:
+    return ACTIVE_LOCATION_STATUSES
+
+
+def inactive_location_status_params() -> tuple[str, ...]:
+    return INACTIVE_LOCATION_STATUSES

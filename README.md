@@ -96,11 +96,17 @@ one deployable HTML artifact:
 - `export_static_data.py`: shared Parquet snapshot builders used by the atlas.
 - `generate_dashboard.py`: shared destination-summary builder used by the atlas.
 - `generate_static_app.py`: primary generator for `static/arcade_road_trip.html`.
+- `scan_google_maps_closures.py`: explicit slow Google Maps URL closure probe
+  for review-led status curation.
 
 This repository grew out of an Aurcade scrape, then merged in Pinball Map and
 Zenius -I- vanisher data. The database keeps the original Aurcade-compatible
 schema while using sidecar tables for provenance, status curation, validation
 links, and canonical game mappings.
+
+Active/inactive location status vocabulary is centralized in `arcade_db.py`.
+The CLI and static atlas data builders use that shared definition so closed or
+replaced locations do not drift into UI counts by accident.
 
 ## Static Serving
 
@@ -152,6 +158,19 @@ it is slow and network-heavy:
 .venv/bin/python sync_arcade_data.py --include-aurcade-scrape --aurcade-index-only --plan-only
 ```
 
+Google Maps closure scanning is separate from the normal sync pipeline. It
+opens one official Maps search URL per location, reads multiple rendered page
+signals for explicit closure labels, and records evidence only when `--apply`
+is passed. The default automatic scan is deliberately slow, with a random
+45-150 second delay between requests:
+
+```bash
+.venv/bin/python -m playwright install chromium
+.venv/bin/python scan_google_maps_closures.py --sample
+.venv/bin/python scan_google_maps_closures.py --state FL --limit 25 --apply
+.venv/bin/python scan_google_maps_closures.py --loop --max-runtime-minutes 240 --apply
+```
+
 ## Quick Checks
 
 ```bash
@@ -159,6 +178,6 @@ it is slow and network-heavy:
 .venv/bin/python sync_arcade_data.py --plan-only
 .venv/bin/python generate_static_app.py
 .venv/bin/python -m unittest discover -s tests
-.venv/bin/python -m py_compile arcade_db.py arcade_query.py canonicalize_games.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scrape_aurcade_locations.py curate_us_sources.py us_states.py sync_arcade_data.py maintain_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
+.venv/bin/python -m py_compile arcade_db.py arcade_query.py canonicalize_games.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scan_google_maps_closures.py scrape_aurcade_locations.py curate_us_sources.py us_states.py sync_arcade_data.py maintain_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
 .venv/bin/python arcade_query.py sql "SELECT COUNT(*) AS locations FROM locations"
 ```
