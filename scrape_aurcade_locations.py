@@ -417,8 +417,7 @@ def parse_games(location_id: int, page: str) -> List[LocationGame]:
     return games
 
 
-def connect_db(path: Path) -> duckdb.DuckDBPyConnection:
-    conn = duckdb_connect(path)
+def ensure_schema(conn: duckdb.DuckDBPyConnection) -> None:
     execute_script(
         conn,
         """
@@ -488,6 +487,11 @@ def connect_db(path: Path) -> duckdb.DuckDBPyConnection:
         CREATE INDEX IF NOT EXISTS idx_location_games_location ON location_games(location_id);
         """
     )
+
+
+def connect_db(path: Path) -> duckdb.DuckDBPyConnection:
+    conn = duckdb_connect(path)
+    ensure_schema(conn)
     return conn
 
 
@@ -685,7 +689,7 @@ def existing_detail_ids(conn: duckdb.DuckDBPyConnection) -> set[int]:
         int(row[0])
         for row in conn.execute(
             "SELECT location_id FROM locations WHERE detail_fetched_at IS NOT NULL"
-        )
+        ).fetchall()
     }
 
 
