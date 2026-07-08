@@ -6,15 +6,18 @@ from __future__ import annotations
 import argparse
 import difflib
 import re
-import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Optional
 
+import duckdb
 
-DEFAULT_DB = Path("aurcade_locations.sqlite")
+from arcade_db import DEFAULT_DUCKDB, connect, execute_script, rows
+
+
+DEFAULT_DB = DEFAULT_DUCKDB
 REPORTS_DIR = Path("reports")
 ACTIVE_STATUSES = ("active", "unverified", "uncertain", "matched", "needs_review")
 AUTO_THRESHOLD = 0.995
@@ -92,13 +95,6 @@ class ReviewPair:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-
-def connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA busy_timeout = 10000")
-    return conn
 
 
 def normalize_text(value: Optional[str]) -> str:
@@ -199,20 +195,19 @@ def canonical_game(games: Iterable[Game]) -> Game:
     )[0]
 
 
-def ensure_schema(conn: sqlite3.Connection) -> None:
-    conn.executescript(
+def ensure_schema(conn: duckdb.DuckDBPyConnection) -> None:
+    execute_script(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS game_canonical_links (
-            alias_game_id INTEGER PRIMARY KEY,
-            canonical_game_id INTEGER NOT NULL,
-            confidence REAL NOT NULL,
-            reason TEXT NOT NULL,
-            source TEXT NOT NULL DEFAULT 'auto',
-            notes TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(alias_game_id) REFERENCES games(game_id),
-            FOREIGN KEY(canonical_game_id) REFERENCES games(game_id)
+            alias_game_id BIGINT PRIMARY KEY,
+            canonical_game_id BIGINT NOT NULL,
+            confidence DOUBLE NOT NULL,
+            reason VARCHAR NOT NULL,
+            source VARCHAR NOT NULL DEFAULT 'auto',
+            notes VARCHAR,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE INDEX IF NOT EXISTS idx_game_canonical_links_canonical
@@ -221,8 +216,9 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     )
 
 
-def load_games(conn: sqlite3.Connection) -> list[Game]:
-    rows = conn.execute(
+def load_games(conn: duckdb.DuckDBPyConnection) -> list[Game]:
+    game_rows = rows(
+        conn,
         f"""
         SELECT
             g.game_id,
@@ -240,7 +236,7 @@ def load_games(conn: sqlite3.Connection) -> list[Game]:
         GROUP BY g.game_id, g.name, g.manufacturer
         """,
         ACTIVE_STATUSES,
-    ).fetchall()
+    )
     return [
         Game(
             game_id=int(row["game_id"]),
@@ -249,7 +245,7 @@ def load_games(conn: sqlite3.Connection) -> list[Game]:
             location_count=int(row["location_count"] or 0),
             active_location_count=int(row["active_location_count"] or 0),
         )
-        for row in rows
+        for row in game_rows
         if row["name"]
     ]
 
@@ -359,21 +355,38 @@ def proposed_links(games: list[Game]) -> tuple[list[Link], list[ReviewPair]]:
     return sorted(best_by_alias.values(), key=lambda link: (link.canonical_game_id, link.alias_game_id)), review_pairs
 
 
-def apply_links(conn: sqlite3.Connection, links: list[Link]) -> None:
+def apply_links(conn: duckdb.DuckDBPyConnection, links: list[Link]) -> None:
+    if not links:
+        return
     timestamp = utc_now()
+    alias_ids = [link.alias_game_id for link in links]
+    existing = {
+        int(row["alias_game_id"]): str(row["source"] or "")
+        for row in rows(
+            conn,
+            """
+            SELECT alias_game_id, source
+            FROM game_canonical_links
+            WHERE alias_game_id IN (SELECT unnest(?))
+            """,
+            (alias_ids,),
+        )
+    }
+    auto_alias_ids = [alias_id for alias_id, source in existing.items() if source == "auto"]
+    if auto_alias_ids:
+        conn.execute(
+            "DELETE FROM game_canonical_links WHERE source = 'auto' AND alias_game_id IN (SELECT unnest(?))",
+            (auto_alias_ids,),
+        )
+    insertable = [link for link in links if existing.get(link.alias_game_id) in (None, "auto")]
+    if not insertable:
+        return
     conn.executemany(
         """
         INSERT INTO game_canonical_links (
             alias_game_id, canonical_game_id, confidence, reason, source, notes, created_at, updated_at
         )
         VALUES (?, ?, ?, ?, 'auto', NULL, ?, ?)
-        ON CONFLICT(alias_game_id) DO UPDATE SET
-            canonical_game_id = excluded.canonical_game_id,
-            confidence = excluded.confidence,
-            reason = excluded.reason,
-            source = excluded.source,
-            updated_at = excluded.updated_at
-        WHERE game_canonical_links.source = 'auto'
         """,
         [
             (
@@ -384,7 +397,7 @@ def apply_links(conn: sqlite3.Connection, links: list[Link]) -> None:
                 timestamp,
                 timestamp,
             )
-            for link in links
+            for link in insertable
         ],
     )
 
@@ -468,8 +481,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
-    with connect(args.db) as conn:
-        ensure_schema(conn)
+    with connect(args.db, read_only=not args.apply) as conn:
+        if args.apply:
+            ensure_schema(conn)
         games = load_games(conn)
         links, review_pairs = proposed_links(games)
         if args.apply:

@@ -81,23 +81,6 @@ def build_sync_steps(args: argparse.Namespace, python: str = sys.executable) -> 
             )
         )
 
-    if not args.skip_canonicalization and args.source in ("all", "pinballmap", "ziv"):
-        steps.append(
-            SyncStep(
-                phase="curation",
-                name="canonicalize game aliases",
-                command=(
-                    python,
-                    "canonicalize_games.py",
-                    "--db",
-                    str(args.sqlite_db),
-                    "--report",
-                    *apply_flag(args),
-                ),
-                mutates=args.apply,
-            )
-        )
-
     if not args.skip_validation:
         if args.validation in ("all", "pinballmap") and args.source in ("all", "pinballmap"):
             steps.append(
@@ -171,6 +154,23 @@ def build_sync_steps(args: argparse.Namespace, python: str = sys.executable) -> 
                     "--replace",
                 ),
                 mutates=True,
+            )
+        )
+
+    if not args.skip_canonicalization and args.source in ("all", "pinballmap", "ziv"):
+        steps.append(
+            SyncStep(
+                phase="curation",
+                name="canonicalize game aliases",
+                command=(
+                    python,
+                    "canonicalize_games.py",
+                    "--db",
+                    str(args.duckdb),
+                    "--report",
+                    *apply_flag(args),
+                ),
+                mutates=args.apply,
             )
         )
 

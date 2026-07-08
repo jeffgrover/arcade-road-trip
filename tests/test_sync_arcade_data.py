@@ -38,19 +38,23 @@ class SyncArcadeDataTests(unittest.TestCase):
         steps = build_sync_steps(args(), python="python")
 
         self.assertEqual(
-            ["source-sync", "curation", "validation", "validation", "database", "artifact-build"],
+            ["source-sync", "validation", "validation", "database", "curation", "artifact-build"],
             [step.phase for step in steps],
         )
         self.assertEqual("curate source updates", steps[0].name)
-        self.assertIn("migrate_sqlite_to_duckdb.py", steps[-2].command)
+        self.assertIn("migrate_sqlite_to_duckdb.py", steps[-3].command)
+        self.assertIn("canonicalize_games.py", steps[-2].command)
+        self.assertIn("arcade.duckdb", steps[-2].command)
         self.assertIn("generate_static_app.py", steps[-1].command)
         self.assertNotIn("--apply", steps[0].command)
 
     def test_apply_is_forwarded_to_mutating_wrapped_steps(self):
         steps = build_sync_steps(args(apply=True), python="python")
 
-        curate = steps[0]
+        curate = next(step for step in steps if step.phase == "curation")
+        source_sync = next(step for step in steps if step.phase == "source-sync")
         validation_steps = [step for step in steps if step.phase == "validation"]
+        self.assertIn("--apply", source_sync.command)
         self.assertIn("--apply", curate.command)
         self.assertTrue(all("--apply" in step.command for step in validation_steps))
 

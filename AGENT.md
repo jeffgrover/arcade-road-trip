@@ -38,6 +38,8 @@ Public GitHub Pages URL:
 - `curate_us_sources.py`: conservative national source-curation orchestrator.
 - `sync_arcade_data.py`: operations wrapper that keeps source sync, curation,
   validation, DuckDB refresh, and static artifact generation as explicit phases.
+- `arcade_db.py`: shared DuckDB connection/query helpers for newly ported
+  pipeline scripts.
 - `arcade_query.py`: read-only query CLI intended for Codex/LLM use.
 - `arcade_roadtrip_app.py`: legacy Flask route-planning prototype/reference and
   local static server.
@@ -180,7 +182,7 @@ currently a wrapper around the proven source-specific scripts, then refreshes
 boundaries clean:
 
 - `source-sync`: upstream polling/fetching and one-way source imports.
-- `curation`: deterministic local cleanup such as game canonicalization.
+- `curation`: deterministic DuckDB-native cleanup such as game canonicalization.
 - `validation`: source confidence checks and review queues.
 - `database`: canonical DuckDB refresh/maintenance.
 - `artifact-build`: Parquet intermediates and `static/arcade_road_trip.html`.
@@ -194,9 +196,10 @@ python3 sync_arcade_data.py --source pinballmap --state CO
 python3 sync_arcade_data.py --all-continental-us --skip-build
 ```
 
-Do not hide validation work inside source-sync implementations. A default sync
-may run both phases, but the concerns should remain independently testable and
-replaceable.
+Current order is legacy source/validation writers first, DuckDB refresh second,
+then DuckDB-native curation and artifact build. Do not hide validation work
+inside source-sync implementations. A default sync may run both phases, but the
+concerns should remain independently testable and replaceable.
 
 ## Querying the Data
 

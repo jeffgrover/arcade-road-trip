@@ -43,7 +43,8 @@ concerns separate while wrapping the current source-specific scripts:
 - source sync: poll/fetch upstream source changes;
 - curation: canonicalize obvious game aliases;
 - validation: check source links and review queues;
-- database: refresh the canonical DuckDB file from the legacy SQLite writer;
+- database: refresh the canonical DuckDB file from the legacy SQLite writers;
+- curation: apply deterministic DuckDB-native cleanup such as game aliases;
 - artifact build: regenerate Parquet intermediates and the one-file atlas.
 
 Preview the plan without running anything:
@@ -84,6 +85,7 @@ one deployable HTML artifact:
 - `arcade_roadtrip.duckdb`: canonical working database for static generation.
 - `sync_arcade_data.py`: operations wrapper for source sync, validation,
   DuckDB refresh, and static artifact generation.
+- `arcade_db.py`: shared DuckDB connection/query helpers for pipeline scripts.
 - `migrate_sqlite_to_duckdb.py`: one-way migration from the legacy SQLite
   snapshot while import/curation writers are being ported.
 - `aurcade_locations.sqlite`: legacy SQLite source snapshot retained during the
@@ -150,6 +152,6 @@ but it is not the national path.
 .venv/bin/python migrate_sqlite_to_duckdb.py --replace
 .venv/bin/python generate_static_app.py
 .venv/bin/python -m unittest discover -s tests
-.venv/bin/python -m py_compile arcade_query.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scrape_aurcade_locations.py arcade_roadtrip_app.py curate_us_sources.py us_states.py sync_arcade_data.py migrate_sqlite_to_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
+.venv/bin/python -m py_compile arcade_db.py arcade_query.py canonicalize_games.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scrape_aurcade_locations.py arcade_roadtrip_app.py curate_us_sources.py us_states.py sync_arcade_data.py migrate_sqlite_to_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
 sqlite3 aurcade_locations.sqlite "PRAGMA integrity_check; PRAGMA foreign_key_check;"
 ```
