@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only query helper for the local Aurcade/Pinball Map SQLite database.
+"""Read-only query helper for the local Aurcade/Pinball Map DuckDB database.
 
 This is intentionally small and boring: it gives Codex a stable shell interface
 for asking structured questions, while keeping the database read-only.
@@ -13,16 +13,19 @@ import difflib
 import json
 import math
 import re
-import sqlite3
 import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, Optional, Sequence
+from typing import Any, Optional, Sequence
+
+import duckdb
+
+from arcade_db import DEFAULT_DUCKDB, connect as duckdb_connect, has_table as duckdb_has_table
 
 
-DEFAULT_DB = Path("aurcade_locations.sqlite")
+DEFAULT_DB = DEFAULT_DUCKDB
 DEFAULT_LIMIT = 25
 ACTIVE_STATUSES = ("active", "unverified", "uncertain", "matched", "needs_review")
 LOCATION_ID_PATTERN = re.compile(r"\((-?\d+)\)")
@@ -36,18 +39,17 @@ class QueryResult:
     notes: list[str]
 
 
-def connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
-    return conn
+def connect(db_path: Path) -> duckdb.DuckDBPyConnection:
+    return duckdb_connect(db_path, read_only=True)
 
 
-def rows_from_cursor(cursor: sqlite3.Cursor) -> list[dict[str, Any]]:
-    return [dict(row) for row in cursor.fetchall()]
+def rows_from_cursor(cursor: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
+    columns = [description[0] for description in cursor.description or []]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
 def run_query(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     sql: str,
     params: Sequence[Any] = (),
     *,
@@ -59,34 +61,30 @@ def run_query(
     return QueryResult(title=title, columns=columns, rows=rows_from_cursor(cursor), notes=notes or [])
 
 
-def has_table(conn: sqlite3.Connection, table_name: str) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
-        (table_name,),
-    ).fetchone()
-    return row is not None
+def has_table(conn: duckdb.DuckDBPyConnection, table_name: str) -> bool:
+    return duckdb_has_table(conn, table_name)
 
 
-def location_status_join(conn: sqlite3.Connection, alias: str = "l") -> str:
+def location_status_join(conn: duckdb.DuckDBPyConnection, alias: str = "l") -> str:
     if not has_table(conn, "location_statuses"):
         return ""
     return f"LEFT JOIN location_statuses ls ON ls.location_id = {alias}.location_id"
 
 
-def active_location_clause(conn: sqlite3.Connection, alias: str = "l", include_inactive: bool = False) -> str:
+def active_location_clause(conn: duckdb.DuckDBPyConnection, alias: str = "l", include_inactive: bool = False) -> str:
     if include_inactive or not has_table(conn, "location_statuses"):
         return "1=1"
     quoted = ",".join(f"'{status}'" for status in ACTIVE_STATUSES)
     return f"COALESCE(ls.status, 'active') IN ({quoted})"
 
 
-def status_columns(conn: sqlite3.Connection) -> str:
+def status_columns(conn: duckdb.DuckDBPyConnection) -> str:
     if not has_table(conn, "location_statuses"):
         return ""
     return ", COALESCE(ls.status, 'active') AS status, ls.replacement_name"
 
 
-def game_identity_cte(conn: sqlite3.Connection) -> str:
+def game_identity_cte(conn: duckdb.DuckDBPyConnection) -> str:
     if has_table(conn, "game_canonical_links"):
         return """
         game_identity AS (
@@ -197,7 +195,7 @@ def render(result: QueryResult, output_format: str) -> str:
     return "\n\n".join(parts)
 
 
-def summary(conn: sqlite3.Connection, include_inactive: bool = False) -> QueryResult:
+def summary(conn: duckdb.DuckDBPyConnection, include_inactive: bool = False) -> QueryResult:
     status_join = location_status_join(conn)
     active_clause = active_location_clause(conn, include_inactive=include_inactive)
     canonical_links_metric = (
@@ -228,7 +226,7 @@ def summary(conn: sqlite3.Connection, include_inactive: bool = False) -> QueryRe
     return run_query(conn, sql, title="Database Summary")
 
 
-def city_summary(conn: sqlite3.Connection, state: str, limit: int, include_inactive: bool = False) -> QueryResult:
+def city_summary(conn: duckdb.DuckDBPyConnection, state: str, limit: int, include_inactive: bool = False) -> QueryResult:
     status_join = location_status_join(conn)
     active_clause = active_location_clause(conn, include_inactive=include_inactive)
     sql = f"""
@@ -249,7 +247,7 @@ def city_summary(conn: sqlite3.Connection, state: str, limit: int, include_inact
     return run_query(conn, sql, (state, limit), title=f"City Summary: {state}")
 
 
-def search_locations(conn: sqlite3.Connection, query: str, limit: int, include_inactive: bool = False) -> QueryResult:
+def search_locations(conn: duckdb.DuckDBPyConnection, query: str, limit: int, include_inactive: bool = False) -> QueryResult:
     status_join = location_status_join(conn)
     active_clause = active_location_clause(conn, include_inactive=include_inactive)
     extra_columns = status_columns(conn)
@@ -280,7 +278,7 @@ def search_locations(conn: sqlite3.Connection, query: str, limit: int, include_i
 
 
 def add_fuzzy_location_rows(
-    conn: sqlite3.Connection, query: str, result: QueryResult, limit: int, include_inactive: bool = False
+    conn: duckdb.DuckDBPyConnection, query: str, result: QueryResult, limit: int, include_inactive: bool = False
 ) -> QueryResult:
     seen = {row["location_id"] for row in result.rows}
     status_join = location_status_join(conn)
@@ -313,7 +311,7 @@ def add_fuzzy_location_rows(
     return QueryResult(result.title, result.columns, rows, result.notes)
 
 
-def search_games(conn: sqlite3.Connection, query: str, limit: int, include_inactive: bool = False) -> QueryResult:
+def search_games(conn: duckdb.DuckDBPyConnection, query: str, limit: int, include_inactive: bool = False) -> QueryResult:
     status_join = location_status_join(conn)
     active_clause = active_location_clause(conn, include_inactive=include_inactive)
     sql = f"""
@@ -345,7 +343,7 @@ def search_games(conn: sqlite3.Connection, query: str, limit: int, include_inact
 
 
 def add_fuzzy_game_rows(
-    conn: sqlite3.Connection, query: str, result: QueryResult, limit: int, include_inactive: bool = False
+    conn: duckdb.DuckDBPyConnection, query: str, result: QueryResult, limit: int, include_inactive: bool = False
 ) -> QueryResult:
     seen = {row["game_id"] for row in result.rows}
     status_join = location_status_join(conn)
@@ -392,7 +390,7 @@ def add_fuzzy_game_rows(
 
 
 def where_to_play(
-    conn: sqlite3.Connection, query: str, state: Optional[str], limit: int, include_inactive: bool = False
+    conn: duckdb.DuckDBPyConnection, query: str, state: Optional[str], limit: int, include_inactive: bool = False
 ) -> QueryResult:
     game_matches = search_games(conn, query, 8, include_inactive).rows
     if not game_matches:
@@ -432,7 +430,7 @@ def where_to_play(
     return run_query(conn, sql, params, title=f"Where To Play: {query!r}", notes=notes)
 
 
-def inventory(conn: sqlite3.Connection, query: str, limit: int, include_inactive: bool = False) -> QueryResult:
+def inventory(conn: duckdb.DuckDBPyConnection, query: str, limit: int, include_inactive: bool = False) -> QueryResult:
     location = best_location(conn, query, include_inactive)
     if location is None:
         return QueryResult(f"Inventory: {query!r}", [], [], ["No matching location found."])
@@ -451,7 +449,7 @@ def inventory(conn: sqlite3.Connection, query: str, limit: int, include_inactive
     return run_query(conn, sql, (location["location_id"], limit), title=f"Inventory: {location['name']}", notes=notes)
 
 
-def best_location(conn: sqlite3.Connection, query: str, include_inactive: bool = False) -> Optional[dict[str, Any]]:
+def best_location(conn: duckdb.DuckDBPyConnection, query: str, include_inactive: bool = False) -> Optional[dict[str, Any]]:
     candidates = search_locations(conn, query, 10, include_inactive).rows
     if not candidates:
         return None
@@ -495,7 +493,7 @@ def location_note(location: dict[str, Any]) -> str:
 
 
 def compare_locations(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     left_query: str,
     right_query: str,
     limit: int,
@@ -538,7 +536,7 @@ def compare_locations(
 
 
 def rare_games(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     state: Optional[str],
     max_locations: int,
     limit: int,
@@ -568,7 +566,7 @@ def rare_games(
         COUNT(DISTINCT location_id) AS location_count
     FROM scoped
     GROUP BY game_id, name, manufacturer
-    HAVING location_count <= ?
+    HAVING COUNT(DISTINCT location_id) <= ?
     ORDER BY location_count, name
     LIMIT ?
     """
@@ -577,7 +575,7 @@ def rare_games(
 
 
 def nearby(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     lat: float,
     lon: float,
     miles: float,
@@ -641,11 +639,11 @@ def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float
     return radius_miles * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def raw_sql(conn: sqlite3.Connection, sql: str, limit: Optional[int]) -> QueryResult:
+def raw_sql(conn: duckdb.DuckDBPyConnection, sql: str, limit: Optional[int]) -> QueryResult:
     require_readonly_sql(sql)
     wrapped_sql = sql.strip().rstrip(";")
     if limit is not None and wrapped_sql.lower().startswith(("select", "with")):
-        wrapped_sql = f"SELECT * FROM ({wrapped_sql}) LIMIT ?"
+        wrapped_sql = f"SELECT * FROM ({wrapped_sql}) AS raw_query LIMIT ?"
         return run_query(conn, wrapped_sql, (limit,), title="Raw SQL")
     return run_query(conn, wrapped_sql, title="Raw SQL")
 
@@ -677,7 +675,7 @@ def stale_cutoff(days: Optional[int]) -> Optional[str]:
 
 
 def location_ids_needing_verification(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     location_ids: Sequence[int],
     stale_days: Optional[int],
 ) -> list[int]:
@@ -716,12 +714,18 @@ def should_lazy_verify(args: argparse.Namespace) -> bool:
 
 
 def verify_locations_for_result(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     args: argparse.Namespace,
     result: QueryResult,
 ) -> tuple[bool, list[str]]:
     if not should_lazy_verify(args):
         return False, []
+    if args.db.suffix == ".duckdb":
+        raise RuntimeError(
+            "lazy OSM verification still writes through the legacy SQLite verifier; "
+            "run sync_arcade_data.py validation or port verify_locations_osm.py before "
+            "using --verify-missing/--verify-stale-days against DuckDB"
+        )
     location_ids = extract_location_ids(result)
     if args.verify_limit is not None:
         location_ids = location_ids[: args.verify_limit]
@@ -761,7 +765,7 @@ def verify_locations_for_result(
     return True, notes
 
 
-def inactive_locations(conn: sqlite3.Connection, state: Optional[str], limit: int) -> QueryResult:
+def inactive_locations(conn: duckdb.DuckDBPyConnection, state: Optional[str], limit: int) -> QueryResult:
     if not has_table(conn, "location_statuses"):
         return QueryResult("Inactive Locations", [], [], ["location_statuses table does not exist yet."])
     state_clause = "AND l.state = ?" if state else ""
@@ -785,7 +789,7 @@ def inactive_locations(conn: sqlite3.Connection, state: Optional[str], limit: in
     return run_query(conn, sql, params, title="Inactive Locations")
 
 
-def verification_report(conn: sqlite3.Connection, state: Optional[str], limit: int) -> QueryResult:
+def verification_report(conn: duckdb.DuckDBPyConnection, state: Optional[str], limit: int) -> QueryResult:
     if not has_table(conn, "location_verifications"):
         return QueryResult("Location Verification Report", [], [], ["location_verifications table does not exist yet."])
     state_clause = "WHERE l.state = ?" if state else ""
@@ -830,7 +834,7 @@ def verification_report(conn: sqlite3.Connection, state: Optional[str], limit: i
     return run_query(conn, sql, params, title="Location Verification Report")
 
 
-def source_coverage(conn: sqlite3.Connection, state: Optional[str], limit: int) -> QueryResult:
+def source_coverage(conn: duckdb.DuckDBPyConnection, state: Optional[str], limit: int) -> QueryResult:
     state_clause = "WHERE l.state = ?" if state else ""
     params: list[Any] = []
     if state:
@@ -857,7 +861,7 @@ def source_coverage(conn: sqlite3.Connection, state: Optional[str], limit: int) 
     return run_query(conn, sql, params, title="Source Coverage")
 
 
-def duplicate_leads(conn: sqlite3.Connection, state: Optional[str], limit: int) -> QueryResult:
+def duplicate_leads(conn: duckdb.DuckDBPyConnection, state: Optional[str], limit: int) -> QueryResult:
     state_clause = "AND a.state = ?" if state else ""
     params: list[Any] = []
     if state:
@@ -893,7 +897,7 @@ def duplicate_leads(conn: sqlite3.Connection, state: Optional[str], limit: int) 
     return run_query(conn, sql, params, title="Possible Duplicate Locations")
 
 
-def review_queue(conn: sqlite3.Connection, state: Optional[str], limit: int) -> QueryResult:
+def review_queue(conn: duckdb.DuckDBPyConnection, state: Optional[str], limit: int) -> QueryResult:
     state_clause = "AND l.state = ?" if state else ""
     params: list[Any] = []
     if state:
@@ -923,8 +927,8 @@ def review_queue(conn: sqlite3.Connection, state: Optional[str], limit: int) -> 
     LEFT JOIN latest ON latest.location_id = l.location_id AND latest.rn = 1
     WHERE COALESCE(ls.status, 'active') NOT IN ('closed', 'replaced')
       {state_clause}
-    GROUP BY l.location_id
-    HAVING last_checked_at IS NULL OR COALESCE(l.game_count, 0) >= 25
+    GROUP BY l.location_id, l.name, l.city, l.state, l.game_count, COALESCE(ls.status, 'active')
+    HAVING MAX(latest.checked_at) IS NULL OR COALESCE(l.game_count, 0) >= 25
     ORDER BY
         CASE WHEN last_checked_at IS NULL THEN 0 ELSE 1 END,
         COALESCE(l.game_count, 0) DESC,
@@ -936,7 +940,7 @@ def review_queue(conn: sqlite3.Connection, state: Optional[str], limit: int) -> 
     return run_query(conn, sql, params, title="Review Queue")
 
 
-def game_aliases(conn: sqlite3.Connection, query: Optional[str], limit: int) -> QueryResult:
+def game_aliases(conn: duckdb.DuckDBPyConnection, query: Optional[str], limit: int) -> QueryResult:
     if not has_table(conn, "game_canonical_links"):
         return QueryResult("Game Canonical Links", [], [], ["game_canonical_links table does not exist yet."])
     query_clause = ""
@@ -972,8 +976,8 @@ def game_aliases(conn: sqlite3.Connection, query: Optional[str], limit: int) -> 
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Query the local arcade SQLite database.")
-    parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="SQLite database path.")
+    parser = argparse.ArgumentParser(description="Query the local arcade DuckDB database.")
+    parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="DuckDB database path.")
     parser.add_argument(
         "--format",
         choices=("markdown", "json", "csv"),
@@ -1108,7 +1112,7 @@ def normalize_argv(argv: Optional[Sequence[str]]) -> Optional[list[str]]:
     return [*front, *rest]
 
 
-def dispatch(conn: sqlite3.Connection, args: argparse.Namespace) -> QueryResult:
+def dispatch(conn: duckdb.DuckDBPyConnection, args: argparse.Namespace) -> QueryResult:
     if args.command == "summary":
         return summary(conn, args.include_inactive)
     if args.command == "city-summary":

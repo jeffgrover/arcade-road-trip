@@ -90,7 +90,7 @@ one deployable HTML artifact:
   snapshot while import/curation writers are being ported.
 - `aurcade_locations.sqlite`: legacy SQLite source snapshot retained during the
   migration.
-- `arcade_query.py`: read-only CLI for analysis.
+- `arcade_query.py`: read-only DuckDB CLI for analysis.
 - `curate_us_sources.py`: national source-enrichment orchestrator.
 - `export_static_data.py`: shared Parquet snapshot builders used by the atlas.
 - `generate_dashboard.py`: shared destination-summary builder used by the atlas.
@@ -134,7 +134,8 @@ default and writes review reports under `reports/`:
 
 These source-enrichment scripts are still SQLite-era writers and are the next
 porting target. Apply mode makes a SQLite backup unless `--skip-backup` is
-passed:
+passed; `arcade_query.py` no longer runs lazy source verification against the
+canonical DuckDB file until the verifier itself is ported.
 
 ```bash
 .venv/bin/python curate_us_sources.py --all-continental-us --apply

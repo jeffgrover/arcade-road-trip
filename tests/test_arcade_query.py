@@ -1,5 +1,6 @@
 import unittest
-import sqlite3
+
+import duckdb
 
 from arcade_query import (
     QueryResult,
@@ -77,52 +78,82 @@ class ArcadeQueryTests(unittest.TestCase):
         self.assertIn("| Quarters", output)
 
     def test_canonical_game_links_collapse_counts(self):
-        conn = sqlite3.connect(":memory:")
-        conn.row_factory = sqlite3.Row
-        conn.executescript(
+        conn = duckdb.connect(":memory:")
+        conn.execute(
             """
             CREATE TABLE games (
-                game_id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                manufacturer TEXT
+                game_id BIGINT,
+                name VARCHAR NOT NULL,
+                manufacturer VARCHAR
             );
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE locations (
-                location_id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                city TEXT,
-                state TEXT,
-                street_address TEXT,
-                source_url TEXT
+                location_id BIGINT,
+                name VARCHAR NOT NULL,
+                city VARCHAR,
+                state VARCHAR,
+                street_address VARCHAR,
+                source_url VARCHAR
             );
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE location_games (
-                location_id INTEGER NOT NULL,
-                game_id INTEGER NOT NULL,
-                cabinet_type TEXT,
-                year INTEGER,
-                PRIMARY KEY (location_id, game_id)
+                location_id BIGINT NOT NULL,
+                game_id BIGINT NOT NULL,
+                cabinet_type VARCHAR,
+                year INTEGER
             );
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE location_statuses (
-                location_id INTEGER PRIMARY KEY,
-                status TEXT,
-                replacement_name TEXT
+                location_id BIGINT,
+                status VARCHAR,
+                replacement_name VARCHAR
             );
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE game_canonical_links (
-                alias_game_id INTEGER PRIMARY KEY,
-                canonical_game_id INTEGER NOT NULL,
+                alias_game_id BIGINT,
+                canonical_game_id BIGINT NOT NULL,
                 confidence REAL NOT NULL,
-                reason TEXT NOT NULL,
-                source TEXT NOT NULL DEFAULT 'auto',
-                updated_at TEXT
+                reason VARCHAR NOT NULL,
+                source VARCHAR NOT NULL DEFAULT 'auto',
+                updated_at VARCHAR
             );
+            """
+        )
+        conn.execute(
+            """
             INSERT INTO games(game_id, name, manufacturer) VALUES
                 (1, 'Tales of the Arabian Nights', 'Williams'),
                 (-2000001364, 'Tales of the Arabian Nights', 'Williams');
+            """
+        )
+        conn.execute(
+            """
             INSERT INTO locations(location_id, name, city, state) VALUES
                 (10, 'Arcade One', 'Sandy', 'UT'),
                 (11, 'Arcade Two', 'Ogden', 'UT');
+            """
+        )
+        conn.execute(
+            """
             INSERT INTO location_games(location_id, game_id, cabinet_type) VALUES
                 (10, 1, 'Pinball'),
                 (11, -2000001364, 'Pinball');
+            """
+        )
+        conn.execute(
+            """
             INSERT INTO game_canonical_links(
                 alias_game_id, canonical_game_id, confidence, reason, source
             ) VALUES (
