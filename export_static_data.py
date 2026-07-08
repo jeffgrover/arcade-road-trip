@@ -42,6 +42,7 @@ def game_identity_cte(conn: duckdb.DuckDBPyConnection) -> str:
             SELECT
                 g.game_id,
                 g.name,
+                COALESCE(cg.manufacturer, g.manufacturer, '') AS manufacturer,
                 COALESCE(gcl.canonical_game_id, g.game_id) AS canonical_game_id,
                 COALESCE(cg.name, g.name) AS canonical_name
             FROM games g
@@ -51,7 +52,12 @@ def game_identity_cte(conn: duckdb.DuckDBPyConnection) -> str:
         """
     return """
     game_identity AS (
-        SELECT g.game_id, g.name, g.game_id AS canonical_game_id, g.name AS canonical_name
+        SELECT
+            g.game_id,
+            g.name,
+            COALESCE(g.manufacturer, '') AS manufacturer,
+            g.game_id AS canonical_game_id,
+            g.name AS canonical_name
         FROM games g
     )
     """
@@ -177,6 +183,7 @@ def load_location_games(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]
         al.state AS location_state,
         lg.game_id,
         gi.name,
+        gi.manufacturer,
         gi.canonical_game_id,
         gi.canonical_name,
         COALESCE(lg.cabinet_type, '') AS cabinet_type,
