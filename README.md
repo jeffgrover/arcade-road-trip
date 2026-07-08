@@ -175,6 +175,16 @@ slow, with a random 45-150 second delay between requests:
 .venv/bin/python scan_google_maps_closures.py --loop --max-runtime-minutes 240 --apply
 ```
 
+Owner website roster validation is a separate research workflow. The first
+pass reports large active arcades with website URLs, and can optionally make
+one polite homepage request per site to look for likely game-list, machine,
+collection, or lineup links. It does not modify curated machine placements:
+
+```bash
+.venv/bin/python scan_arcade_web_rosters.py --limit 25
+.venv/bin/python scan_arcade_web_rosters.py --limit 5 --probe --delay-seconds 10
+```
+
 ## Quick Checks
 
 ```bash
@@ -182,6 +192,6 @@ slow, with a random 45-150 second delay between requests:
 .venv/bin/python sync_arcade_data.py --plan-only
 .venv/bin/python generate_static_app.py
 .venv/bin/python -m unittest discover -s tests
-.venv/bin/python -m py_compile arcade_db.py arcade_query.py canonicalize_games.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scan_google_maps_closures.py scrape_aurcade_locations.py curate_us_sources.py us_states.py sync_arcade_data.py maintain_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
+.venv/bin/python -m py_compile arcade_db.py arcade_query.py canonicalize_games.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scan_google_maps_closures.py scan_arcade_web_rosters.py scrape_aurcade_locations.py curate_us_sources.py us_states.py sync_arcade_data.py maintain_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
 .venv/bin/python arcade_query.py sql "SELECT COUNT(*) AS locations FROM locations"
 ```
