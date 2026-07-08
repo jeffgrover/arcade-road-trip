@@ -85,6 +85,9 @@ def load_location_metrics(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any
             COALESCE(l.city, '') AS city,
             COALESCE(l.state, '') AS state,
             COALESCE(l.street_address, '') AS street_address,
+            COALESCE(l.website_url, '') AS website_url,
+            COALESCE(l.google_place_id, '') AS google_place_id,
+            COALESCE(l.google_cid, '') AS google_cid,
             l.latitude,
             l.longitude
         FROM locations l
@@ -117,6 +120,9 @@ def load_location_metrics(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any
         al.city,
         al.state,
         al.street_address,
+        al.website_url,
+        al.google_place_id,
+        al.google_cid,
         al.latitude,
         al.longitude,
         COUNT(pi.canonical_game_id) AS machine_count,
@@ -132,6 +138,9 @@ def load_location_metrics(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any
         al.city,
         al.state,
         al.street_address,
+        al.website_url,
+        al.google_place_id,
+        al.google_cid,
         al.latitude,
         al.longitude
     """
@@ -217,6 +226,9 @@ def build_dashboard_data(conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
             "city": row["city"],
             "state": row["state"],
             "street_address": row["street_address"],
+            "website_url": row["website_url"],
+            "google_place_id": row["google_place_id"],
+            "google_cid": row["google_cid"],
             "machines": int(row.get("machine_count") or 0),
             "unique_games": int(row.get("unique_game_count") or 0),
             "rare_us_machines": int(row.get("rare_us_count") or 0),
@@ -323,6 +335,8 @@ def build_html(data: dict[str, Any]) -> str:
     th:first-child, td:first-child {{ text-align: left; }}
     th {{ position: sticky; top: 0; background: #f9fbfc; z-index: 1; color: #344454; font-size: 12px; cursor: pointer; user-select: none; }}
     td.name {{ font-weight: 750; color: #203040; }}
+    .arcade-link {{ color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }}
+    .arcade-link:hover {{ color: #0d6efd; }}
     .table-wrap {{ max-height: 560px; overflow: auto; }}
     .matched-panel-grid .table-wrap, .chart-panel {{ height: 560px; }}
     .chart-panel {{ display: flex; align-items: stretch; }}
@@ -464,6 +478,21 @@ def build_html(data: dict[str, Any]) -> str:
       const pct = max ? Math.max(2, Math.round((value / max) * 100)) : 0;
       return `<div class="bar"><span style="width:${{pct}}%"></span><b>${{format.format(value || 0)}}</b></div>`;
     }}
+    function mapsSearchQuery(row) {{
+      const name = row.name || row.location_name || row.label || '';
+      return [name, row.street_address, row.city, row.state].filter(Boolean).join(' ');
+    }}
+    function arcadeUrl(row) {{
+      const site = String(row.website_url || '').trim();
+      if (site) return /^https?:\\/\\//i.test(site) ? site : `https://${{site}}`;
+      const query = mapsSearchQuery(row) || String(row.name || row.location_name || row.label || 'arcade');
+      const place = String(row.google_place_id || '').trim();
+      if (place) return `https://www.google.com/maps/search/?api=1&query=${{encodeURIComponent(query)}}&query_place_id=${{encodeURIComponent(place)}}`;
+      return `https://www.google.com/maps/search/?api=1&query=${{encodeURIComponent(query)}}`;
+    }}
+    function arcadeNameLink(row, label) {{
+      return `<a class="arcade-link" href="${{escapeHtml(arcadeUrl(row))}}" target="_blank" rel="noopener noreferrer">${{escapeHtml(label ?? row.name ?? row.location_name ?? row.label ?? '')}}</a>`;
+    }}
     function renderRankTable(tableId, rows, metric, columns) {{
       const table = byId(tableId);
       const selected = topRows(rows, metric);
@@ -471,7 +500,10 @@ def build_html(data: dict[str, Any]) -> str:
       table.innerHTML = `<thead><tr><th>Rank</th>${{columns.map(col => `<th data-sort="${{col.key}}">${{col.label}}</th>`).join('')}}</tr></thead>` +
         `<tbody>${{selected.map((row, index) => `<tr><td>${{index + 1}}</td>${{columns.map(col => {{
           const value = row[col.key] || 0;
-          if (col.kind === 'name') return `<td class="name">${{escapeHtml(row[col.key] || '')}}${{row.sub ? `<div class="small">${{escapeHtml(row.sub)}}</div>` : ''}}</td>`;
+          if (col.kind === 'name') {{
+            const nameHtml = col.link ? arcadeNameLink(row, row[col.key] || '') : escapeHtml(row[col.key] || '');
+            return `<td class="name">${{nameHtml}}${{row.sub ? `<div class="small">${{escapeHtml(row.sub)}}</div>` : ''}}</td>`;
+          }}
           if (col.kind === 'bar') return `<td class="bar-cell">${{bar(value, max)}}</td>`;
           if (col.kind === 'rare') return `<td class="rare">${{format.format(value)}}</td>`;
           return `<td>${{format.format(value)}}</td>`;
@@ -506,7 +538,7 @@ def build_html(data: dict[str, Any]) -> str:
         rows: DATA.arcades.map(row => ({{...row, label: row.name, sub: [row.city, row.state].filter(Boolean).join(', ') + (row.street_address ? ' - ' + row.street_address : '')}})),
         sort: 'machines',
         columns: [
-          {{key: 'label', label: 'Arcade', kind: 'name'}},
+          {{key: 'label', label: 'Arcade', kind: 'name', link: true}},
           {{key: 'machines', label: 'Machines', kind: 'bar'}},
           {{key: 'unique_games', label: 'Unique Games'}},
           {{key: 'rare_us_machines', label: 'Rare U.S.', kind: 'rare'}},

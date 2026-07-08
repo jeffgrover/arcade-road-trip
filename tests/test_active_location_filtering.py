@@ -23,7 +23,10 @@ class ActiveLocationFilteringTests(unittest.TestCase):
                 latitude DOUBLE,
                 longitude DOUBLE,
                 game_count INTEGER,
-                source_url VARCHAR
+                source_url VARCHAR,
+                website_url VARCHAR,
+                google_place_id VARCHAR,
+                google_cid VARCHAR
             )
             """
         )
@@ -59,8 +62,8 @@ class ActiveLocationFilteringTests(unittest.TestCase):
         self.conn.execute(
             """
             INSERT INTO locations VALUES
-                (1, 'Open Arcade', 'Arcade', 'Orlando', 'FL', '1 Main', '32830', 28.5, -81.4, 1, 'https://example.test/open'),
-                (2, 'Closed Arcade', 'Arcade', 'Orlando', 'FL', '2 Main', '32830', 28.6, -81.5, 1, 'https://example.test/closed')
+                (1, 'Open Arcade', 'Arcade', 'Orlando', 'FL', '1 Main', '32830', 28.5, -81.4, 1, 'https://example.test/open', 'https://open.example', 'PlaceOpen', 'CidOpen'),
+                (2, 'Closed Arcade', 'Arcade', 'Orlando', 'FL', '2 Main', '32830', 28.6, -81.5, 1, 'https://example.test/closed', 'https://closed.example', 'PlaceClosed', 'CidClosed')
             """
         )
         self.conn.execute("INSERT INTO games VALUES (10, 'Test Pinball', 'Williams')")
@@ -92,6 +95,8 @@ class ActiveLocationFilteringTests(unittest.TestCase):
         location_games = load_location_games(self.conn)
 
         self.assertEqual([row["location_id"] for row in route_locations], [1])
+        self.assertEqual(route_locations[0]["website_url"], "https://open.example")
+        self.assertEqual(route_locations[0]["google_place_id"], "PlaceOpen")
         self.assertEqual([row["location_id"] for row in location_games], [1])
         self.assertEqual(location_games[0]["us_location_count"], 1)
 
@@ -100,6 +105,8 @@ class ActiveLocationFilteringTests(unittest.TestCase):
 
         self.assertEqual([row["location_id"] for row in metrics], [1])
         self.assertEqual(metrics[0]["machine_count"], 1)
+        self.assertEqual(metrics[0]["website_url"], "https://open.example")
+        self.assertEqual(metrics[0]["google_place_id"], "PlaceOpen")
 
 
 if __name__ == "__main__":
