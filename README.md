@@ -161,8 +161,12 @@ it is slow and network-heavy:
 Google Maps closure scanning is separate from the normal sync pipeline. It
 opens one official Maps search URL per location, reads multiple rendered page
 signals for explicit closure labels, and records evidence only when `--apply`
-is passed. The default automatic scan is deliberately slow, with a random
-45-150 second delay between requests:
+is passed. It also captures Google place ids, website URLs, rendered addresses,
+and coordinates for review. Missing `locations.website_url`,
+`locations.google_place_id`, `locations.google_cid`, address, and coordinate
+fields are filled in apply mode; existing values are only overwritten with
+`--overwrite-existing-details`. The default automatic scan is deliberately
+slow, with a random 45-150 second delay between requests:
 
 ```bash
 .venv/bin/python -m playwright install chromium

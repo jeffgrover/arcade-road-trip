@@ -6,8 +6,10 @@ import duckdb
 from scan_google_maps_closures import (
     ClosureScan,
     PageSignals,
+    PlaceMetadata,
     build_maps_search_url,
     ensure_schema,
+    extract_place_metadata,
     failed_scan,
     load_scan_candidates,
     location_query,
@@ -66,6 +68,49 @@ class GoogleMapsClosureScanTests(unittest.TestCase):
         self.assertEqual(scan.status, "closed")
         self.assertEqual(scan.confidence, 0.98)
         self.assertGreaterEqual(scan.signal_counts["permanent_closure"], 2)
+
+    def test_extract_place_metadata_from_rendered_signals(self):
+        metadata = extract_place_metadata(
+            PageSignals(
+                body_text="Arcade Monsters Overview",
+                title="Arcade Monsters Oviedo - Google Maps",
+                aria_labels=(
+                    "Address: 15 Alafaya Woods Blvd Ste 117, Oviedo, FL 32765 ",
+                    "Website: arcademonsters.com ",
+                ),
+                links=(("Website: arcademonsters.com ", "arcademonsters.com", "http://www.arcademonsters.com/"),),
+                app_state='[["ChIJ10tg0Alp54gRjfWEElDkRRw"],"!1s0x88e76909d0604bd7:0x1c45e4501284f58d",28.651782400000002,-81.2069116]',
+            )
+        )
+
+        self.assertEqual(metadata.google_place_id, "ChIJ10tg0Alp54gRjfWEElDkRRw")
+        self.assertEqual(metadata.google_cid, "0x88e76909d0604bd7:0x1c45e4501284f58d")
+        self.assertEqual(metadata.website_url, "http://www.arcademonsters.com/")
+        self.assertEqual(metadata.address, "15 Alafaya Woods Blvd Ste 117, Oviedo, FL 32765")
+        self.assertAlmostEqual(metadata.latitude, 28.6517824)
+        self.assertAlmostEqual(metadata.longitude, -81.2069116)
+
+    def test_place_name_prefers_maps_title(self):
+        scan = scan_from_signals(
+            "Arcade Monsters Oviedo FL",
+            "https://example.test",
+            PageSignals(
+                body_text="Call phone number Address: 15 Alafaya Woods Blvd Ste 117 Directions Reviews",
+                title="Arcade Monsters Oviedo - Google Maps",
+            ),
+        )
+
+        self.assertEqual(scan.matched_name, "Arcade Monsters Oviedo")
+
+    def test_extract_website_from_body_text_when_link_is_missing(self):
+        metadata = extract_place_metadata(
+            PageSignals(
+                body_text="Arcade Monsters Oviedo Open arcademonsters.com Directions Reviews",
+                title="Arcade Monsters Oviedo - Google Maps",
+            )
+        )
+
+        self.assertEqual(metadata.website_url, "https://arcademonsters.com")
 
     def test_parse_temporarily_closed_signal_needs_review(self):
         scan = parse_closure_signal(
@@ -160,24 +205,105 @@ class GoogleMapsClosureScanTests(unittest.TestCase):
                 status="closed",
                 confidence=0.95,
                 matched_name="Disney Quest",
+                metadata=PlaceMetadata(
+                    google_place_id="ChIJclosed",
+                    google_cid="0x1:0x2",
+                    website_url="https://disneyquest.example",
+                    address="1486 East Buena Vista Dr, Lake Buena Vista, FL 32830",
+                    latitude=28.3701,
+                    longitude=-81.5163,
+                ),
                 notes="Google Maps rendered explicit permanent-closure signal(s): 2.",
                 raw_text="Permanently closed",
                 signal_counts={"permanent_closure": 2, "temporary_closure": 0, "place_cues": 2},
             )
+            conn.execute("CREATE TABLE locations(location_id BIGINT, google_place_id VARCHAR, google_cid VARCHAR, website_url VARCHAR, street_address VARCHAR, latitude DOUBLE, longitude DOUBLE)")
+            conn.execute("INSERT INTO locations(location_id) VALUES (214)")
 
             record_scan(conn, 214, scan, "2026-07-08T00:00:00+00:00", apply_status=True)
 
             verification = conn.execute(
-                "SELECT provider, status, evidence_url FROM location_verifications WHERE location_id = 214"
+                "SELECT provider, status, evidence_url, matched_address, matched_latitude, matched_longitude FROM location_verifications WHERE location_id = 214"
             ).fetchone()
             status = conn.execute(
                 "SELECT status, evidence FROM location_statuses WHERE location_id = 214"
             ).fetchone()
+            location = conn.execute(
+                "SELECT google_place_id, google_cid, website_url, street_address, latitude, longitude FROM locations WHERE location_id = 214"
+            ).fetchone()
         finally:
             conn.close()
 
-        self.assertEqual(verification, ("google_maps_url", "closed", "https://example.test"))
+        self.assertEqual(
+            verification,
+            (
+                "google_maps_url",
+                "closed",
+                "https://example.test",
+                "1486 East Buena Vista Dr, Lake Buena Vista, FL 32830",
+                28.3701,
+                -81.5163,
+            ),
+        )
         self.assertEqual(status, ("closed", "google_maps_url"))
+        self.assertEqual(
+            location,
+            (
+                "ChIJclosed",
+                "0x1:0x2",
+                "https://disneyquest.example",
+                "1486 East Buena Vista Dr, Lake Buena Vista, FL 32830",
+                28.3701,
+                -81.5163,
+            ),
+        )
+
+    def test_record_scan_does_not_overwrite_existing_details_by_default(self):
+        conn = duckdb.connect(":memory:")
+        try:
+            ensure_schema(conn)
+            conn.execute(
+                """
+                CREATE TABLE locations(
+                    location_id BIGINT, google_place_id VARCHAR, website_url VARCHAR,
+                    street_address VARCHAR, latitude DOUBLE, longitude DOUBLE
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO locations VALUES (
+                    1, 'ExistingPlace', 'https://existing.example',
+                    'Old Address', 1.0, 2.0
+                )
+                """
+            )
+            scan = ClosureScan(
+                query="Open Arcade",
+                url="https://example.test",
+                status="matched",
+                confidence=0.65,
+                matched_name="Open Arcade",
+                metadata=PlaceMetadata(
+                    google_place_id="NewPlace",
+                    website_url="https://new.example",
+                    address="New Address",
+                    latitude=3.0,
+                    longitude=4.0,
+                ),
+                notes="Matched",
+                raw_text="",
+                signal_counts={"permanent_closure": 0, "temporary_closure": 0, "place_cues": 2},
+            )
+
+            record_scan(conn, 1, scan, "2026-07-08T00:00:00+00:00", apply_status=True)
+            row = conn.execute(
+                "SELECT google_place_id, website_url, street_address, latitude, longitude FROM locations WHERE location_id = 1"
+            ).fetchone()
+        finally:
+            conn.close()
+
+        self.assertEqual(row, ("ExistingPlace", "https://existing.example", "Old Address", 1.0, 2.0))
 
 
 if __name__ == "__main__":

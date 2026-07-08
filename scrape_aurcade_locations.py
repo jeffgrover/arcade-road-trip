@@ -446,6 +446,8 @@ def ensure_schema(conn: duckdb.DuckDBPyConnection) -> None:
             phone VARCHAR,
             address_text VARCHAR,
             website_url VARCHAR,
+            google_place_id VARCHAR,
+            google_cid VARCHAR,
             is_public BIGINT,
             game_count BIGINT,
             unique_game_count BIGINT,

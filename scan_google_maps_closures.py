@@ -52,8 +52,20 @@ class PageSignals:
     body_text: str
     title: str
     aria_labels: tuple[str, ...] = ()
+    links: tuple[tuple[str, str, str], ...] = ()
     meta_text: str = ""
     html_excerpt: str = ""
+    app_state: str = ""
+
+
+@dataclass(frozen=True)
+class PlaceMetadata:
+    google_place_id: str | None = None
+    google_cid: str | None = None
+    website_url: str | None = None
+    address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 @dataclass(frozen=True)
@@ -63,6 +75,7 @@ class ClosureScan:
     status: str
     confidence: float
     matched_name: str | None
+    metadata: PlaceMetadata
     notes: str
     raw_text: str
     signal_counts: dict[str, int]
@@ -96,7 +109,9 @@ def combined_signal_text(signals: PageSignals) -> str:
                 signals.meta_text,
                 signals.body_text,
                 " ".join(signals.aria_labels),
+                " ".join(" ".join(link) for link in signals.links),
                 signals.html_excerpt,
+                signals.app_state,
             )
             if part
         )
@@ -110,11 +125,13 @@ def count_patterns(text: str, patterns: Iterable[re.Pattern[str]]) -> int:
 def infer_place_name(signals: PageSignals, query: str) -> str | None:
     text = combined_signal_text(signals)
     query_name = query.split("  ", 1)[0]
+    title = compact_text(re.sub(r"\s*-\s*Google Maps\s*$", "", signals.title, flags=re.IGNORECASE))
+    if title and title.lower() not in {"google maps", "maps"}:
+        return title
     for pattern in (
         r"Directions to ([^,|]+)",
         r"Search Result: ([^,|]+)",
         r"Share ([^,|]+)",
-        r"Call ([^,|]+)",
     ):
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
@@ -122,10 +139,91 @@ def infer_place_name(signals: PageSignals, query: str) -> str | None:
     return compact_text(query_name) or None
 
 
+def public_website_url(url: str) -> str | None:
+    if not url:
+        return None
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    host = parsed.netloc.lower()
+    if host.endswith("google.com") or host.endswith("gstatic.com") or host.endswith("googleusercontent.com"):
+        return None
+    return url
+
+
+def website_from_text(text: str) -> str | None:
+    blocked_hosts = ("google.", "gstatic.", "googleusercontent.", "schema.org")
+    for domain in re.findall(r"\b((?:[a-z0-9-]+\.)+[a-z]{2,})(?:/[^\s|]*)?", text, flags=re.IGNORECASE):
+        host = domain.lower().strip(".")
+        if any(part in host for part in blocked_hosts):
+            continue
+        if host in {"maps.google.com", "www.google.com"}:
+            continue
+        return f"https://{host}"
+    return None
+
+
+def extract_first(pattern: str, text: str) -> str | None:
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    return compact_text(match.group(1)) if match else None
+
+
+def us_coordinate_pair(first: str, second: str) -> tuple[float, float] | None:
+    a = float(first)
+    b = float(second)
+    if 20 <= a <= 50 and -130 <= b <= -60:
+        return a, b
+    if -130 <= a <= -60 and 20 <= b <= 50:
+        return b, a
+    return None
+
+
+def extract_place_metadata(signals: PageSignals) -> PlaceMetadata:
+    text = combined_signal_text(signals)
+    google_place_id = extract_first(r"\b(ChIJ[A-Za-z0-9_-]+)\b", text)
+    google_cid = extract_first(r"!1s(0x[0-9a-f]+:0x[0-9a-f]+)", text)
+    website_url = None
+    for label, _text, href in signals.links:
+        if label.lower().startswith(("website:", "open website")):
+            website_url = public_website_url(href)
+            if website_url:
+                break
+    if website_url is None:
+        for _label, _text, href in signals.links:
+            website_url = public_website_url(href)
+            if website_url:
+                break
+    if website_url is None:
+        website_url = website_from_text(text)
+    address = None
+    for label in signals.aria_labels:
+        if label.lower().startswith("address:"):
+            address = compact_text(label.split(":", 1)[1])
+            break
+    if address is None:
+        address = extract_first(r"\bAddress:\s*([^|]+?)(?:\s+Copy address\b|\s+Located in:|\s+Open\b|\s+Closed\b|$)", text)
+    latitude = None
+    longitude = None
+    for first, second in re.findall(r"(-?\d+\.\d{5,}),(-?\d+\.\d{5,})", text):
+        pair = us_coordinate_pair(first, second)
+        if pair:
+            latitude, longitude = pair
+            break
+    return PlaceMetadata(
+        google_place_id=google_place_id,
+        google_cid=google_cid,
+        website_url=website_url,
+        address=address,
+        latitude=latitude,
+        longitude=longitude,
+    )
+
+
 def scan_from_signals(query: str, url: str, signals: PageSignals) -> ClosureScan:
     text = combined_signal_text(signals)
     lower = text.lower()
     matched_name = infer_place_name(signals, query)
+    metadata = extract_place_metadata(signals)
     permanent_count = count_patterns(text, PERMANENT_CLOSURE_PATTERNS)
     temporary_count = count_patterns(text, TEMPORARY_CLOSURE_PATTERNS)
     place_cues = sum(1 for cue in ("directions", "website", "reviews", "call", "save") if cue in lower)
@@ -142,6 +240,7 @@ def scan_from_signals(query: str, url: str, signals: PageSignals) -> ClosureScan
             status="closed",
             confidence=confidence,
             matched_name=matched_name,
+            metadata=metadata,
             notes=f"Google Maps rendered explicit permanent-closure signal(s): {permanent_count}.",
             raw_text=text,
             signal_counts=signal_counts,
@@ -153,6 +252,7 @@ def scan_from_signals(query: str, url: str, signals: PageSignals) -> ClosureScan
             status="needs_review",
             confidence=0.80,
             matched_name=matched_name,
+            metadata=metadata,
             notes=f"Google Maps rendered explicit temporary-closure signal(s): {temporary_count}.",
             raw_text=text,
             signal_counts=signal_counts,
@@ -164,6 +264,7 @@ def scan_from_signals(query: str, url: str, signals: PageSignals) -> ClosureScan
             status="matched",
             confidence=0.65,
             matched_name=matched_name,
+            metadata=metadata,
             notes="Google Maps rendered a place page without an obvious permanent-closure label.",
             raw_text=text,
             signal_counts=signal_counts,
@@ -174,6 +275,7 @@ def scan_from_signals(query: str, url: str, signals: PageSignals) -> ClosureScan
         status="needs_review",
         confidence=0.20,
         matched_name=matched_name,
+        metadata=metadata,
         notes="Google Maps page signals did not contain a clear place or closure signal.",
         raw_text=text,
         signal_counts=signal_counts,
@@ -204,16 +306,24 @@ async def rendered_page_signals(url: str, timeout_ms: int, settle_ms: int) -> Pa
             aria_labels = await page.locator("[aria-label]").evaluate_all(
                 "(nodes) => nodes.map((node) => node.getAttribute('aria-label')).filter(Boolean).slice(0, 300)"
             )
+            links = await page.locator("a[href]").evaluate_all(
+                "(nodes) => nodes.map((node) => [node.getAttribute('aria-label') || '', node.innerText || '', node.href || '']).slice(0, 200)"
+            )
             meta_text = await page.locator("meta[content]").evaluate_all(
                 "(nodes) => nodes.map((node) => node.getAttribute('content')).filter(Boolean).slice(0, 100).join(' ')"
             )
             html_excerpt = (await page.content())[:RAW_TEXT_LIMIT]
+            app_state = await page.evaluate(
+                "() => globalThis.APP_INITIALIZATION_STATE ? JSON.stringify(globalThis.APP_INITIALIZATION_STATE).slice(0, 200000) : ''"
+            )
             return PageSignals(
                 body_text=body_text,
                 title=title,
                 aria_labels=tuple(str(label) for label in aria_labels),
+                links=tuple((str(row[0]), str(row[1]), str(row[2])) for row in links),
                 meta_text=str(meta_text),
                 html_excerpt=html_excerpt,
+                app_state=str(app_state),
             )
         finally:
             await browser.close()
@@ -227,6 +337,20 @@ async def scan_query(query: str, timeout_ms: int, settle_ms: int) -> ClosureScan
 
 def connect(db_path: Path, read_only: bool = False) -> duckdb.DuckDBPyConnection:
     return duckdb_connect(db_path, read_only=read_only)
+
+
+def has_column(conn: duckdb.DuckDBPyConnection, table_name: str, column_name: str) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'main'
+          AND lower(table_name) = lower(?)
+          AND lower(column_name) = lower(?)
+        """,
+        (table_name, column_name),
+    ).fetchone()
+    return row is not None
 
 
 def ensure_schema(conn: duckdb.DuckDBPyConnection) -> None:
@@ -266,6 +390,15 @@ def ensure_schema(conn: duckdb.DuckDBPyConnection) -> None:
         );
         """
     )
+    if has_table(conn, "locations"):
+        execute_script(
+            conn,
+            """
+            ALTER TABLE locations ADD COLUMN IF NOT EXISTS google_place_id VARCHAR;
+            ALTER TABLE locations ADD COLUMN IF NOT EXISTS google_cid VARCHAR;
+            ALTER TABLE locations ADD COLUMN IF NOT EXISTS website_url VARCHAR;
+            """
+        )
 
 
 def load_locations_by_id(conn: duckdb.DuckDBPyConnection, location_ids: Iterable[int]) -> list[dict[str, Any]]:
@@ -370,11 +503,20 @@ def record_scan(
     scan: ClosureScan,
     checked_at: str,
     apply_status: bool,
+    overwrite_existing_details: bool = False,
 ) -> None:
     verification_id = conn.execute("SELECT COALESCE(MAX(verification_id), 0) + 1 FROM location_verifications").fetchone()[0]
     raw_json = json.dumps(
         {
             "signal_counts": scan.signal_counts,
+            "place_metadata": {
+                "google_place_id": scan.metadata.google_place_id,
+                "google_cid": scan.metadata.google_cid,
+                "website_url": scan.metadata.website_url,
+                "address": scan.metadata.address,
+                "latitude": scan.metadata.latitude,
+                "longitude": scan.metadata.longitude,
+            },
             "page_text_excerpt": scan.raw_text[:4000],
         },
         ensure_ascii=False,
@@ -386,7 +528,7 @@ def record_scan(
             matched_name, matched_address, matched_latitude, matched_longitude,
             distance_miles, confidence, evidence_url, raw_json, notes
         )
-        VALUES (?, ?, ?, 'google_maps_url', ?, 'search_url', ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?)
+        VALUES (?, ?, ?, 'google_maps_url', ?, 'search_url', ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
         """,
         (
             verification_id,
@@ -395,12 +537,16 @@ def record_scan(
             scan.status,
             scan.query,
             scan.matched_name,
+            scan.metadata.address,
+            scan.metadata.latitude,
+            scan.metadata.longitude,
             scan.confidence,
             scan.url,
             raw_json,
             scan.notes,
         ),
     )
+    update_location_metadata(conn, location_id, scan.metadata, overwrite_existing_details)
     if apply_status and scan.status == "closed":
         existing = conn.execute("SELECT status FROM location_statuses WHERE location_id = ?", (location_id,)).fetchone()
         if existing is None:
@@ -428,8 +574,60 @@ def record_scan(
             )
 
 
+def update_location_metadata(
+    conn: duckdb.DuckDBPyConnection,
+    location_id: int,
+    metadata: PlaceMetadata,
+    overwrite_existing_details: bool = False,
+) -> None:
+    assignments: list[str] = []
+    values: list[Any] = []
+    field_values = {
+        "google_place_id": metadata.google_place_id,
+        "google_cid": metadata.google_cid,
+        "website_url": metadata.website_url,
+        "street_address": metadata.address,
+        "latitude": metadata.latitude,
+        "longitude": metadata.longitude,
+    }
+    for field, value in field_values.items():
+        if value is None or not has_column(conn, "locations", field):
+            continue
+        if overwrite_existing_details:
+            assignments.append(f"{field} = ?")
+        else:
+            assignments.append(f"{field} = COALESCE({field}, ?)")
+        values.append(value)
+    if not assignments:
+        return
+    values.append(location_id)
+    conn.execute(
+        f"""
+        UPDATE locations
+        SET {", ".join(assignments)}
+        WHERE location_id = ?
+        """,
+        values,
+    )
+
+
 def scan_log_prefix(location_id: int | None, query: str) -> str:
     return f"{location_id}: {query}" if location_id is not None else query
+
+
+def metadata_summary(metadata: PlaceMetadata) -> str:
+    parts = []
+    if metadata.google_place_id:
+        parts.append(f"place_id={metadata.google_place_id}")
+    if metadata.google_cid:
+        parts.append(f"cid={metadata.google_cid}")
+    if metadata.website_url:
+        parts.append(f"website={metadata.website_url}")
+    if metadata.address:
+        parts.append(f"address={metadata.address}")
+    if metadata.latitude is not None and metadata.longitude is not None:
+        parts.append(f"latlon={metadata.latitude:.6f},{metadata.longitude:.6f}")
+    return "; ".join(parts)
 
 
 def failed_scan(query: str, exc: Exception) -> ClosureScan:
@@ -439,6 +637,7 @@ def failed_scan(query: str, exc: Exception) -> ClosureScan:
         status="scan_error",
         confidence=0.0,
         matched_name=None,
+        metadata=PlaceMetadata(),
         notes=f"Google Maps scan failed: {type(exc).__name__}: {exc}",
         raw_text="",
         signal_counts={"permanent_closure": 0, "temporary_closure": 0, "place_cues": 0},
@@ -467,8 +666,18 @@ async def scan_work_items(
             f"({scan.confidence:.2f}) {scan.notes}"
         )
         print(f"  {scan.url}")
+        metadata = metadata_summary(scan.metadata)
+        if metadata:
+            print(f"  metadata: {metadata}")
         if args.apply and location_id is not None:
-            record_scan(conn, location_id, scan, checked_at, apply_status=True)
+            record_scan(
+                conn,
+                location_id,
+                scan,
+                checked_at,
+                apply_status=True,
+                overwrite_existing_details=args.overwrite_existing_details,
+            )
             conn.commit()
     return scanned
 
@@ -540,6 +749,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-delay-seconds", type=float, default=DEFAULT_MAX_DELAY_SECONDS)
     parser.add_argument("--timeout-ms", type=int, default=30000)
     parser.add_argument("--settle-ms", type=int, default=2000)
+    parser.add_argument(
+        "--overwrite-existing-details",
+        action="store_true",
+        help="Let Google Maps metadata overwrite existing website/address/coordinate fields when --apply is used.",
+    )
     parser.add_argument("--apply", action="store_true", help="Write verification evidence and mark explicit permanent closures closed.")
     return parser
 
