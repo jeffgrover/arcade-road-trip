@@ -63,7 +63,8 @@ class ActiveLocationFilteringTests(unittest.TestCase):
             """
             INSERT INTO locations VALUES
                 (1, 'Open Arcade', 'Arcade', 'Orlando', 'FL', '1 Main', '32830', 28.5, -81.4, 1, 'https://example.test/open', 'https://open.example', 'PlaceOpen', 'CidOpen'),
-                (2, 'Closed Arcade', 'Arcade', 'Orlando', 'FL', '2 Main', '32830', 28.6, -81.5, 1, 'https://example.test/closed', 'https://closed.example', 'PlaceClosed', 'CidClosed')
+                (2, 'Closed Arcade', 'Arcade', 'Orlando', 'FL', '2 Main', '32830', 28.6, -81.5, 1, 'https://example.test/closed', 'https://closed.example', 'PlaceClosed', 'CidClosed'),
+                (3, 'International Arcade', 'Arcade', 'Rotterdam', 'NL', '3 Main', '3024', 51.9, 4.5, 1, 'https://example.test/nl', 'https://nl.example', 'PlaceNL', 'CidNL')
             """
         )
         self.conn.execute("INSERT INTO games VALUES (10, 'Test Pinball', 'Williams')")
@@ -71,14 +72,16 @@ class ActiveLocationFilteringTests(unittest.TestCase):
             """
             INSERT INTO location_games VALUES
                 (1, 10, 'Pinball'),
-                (2, 10, 'Pinball')
+                (2, 10, 'Pinball'),
+                (3, 10, 'Pinball')
             """
         )
         self.conn.execute(
             """
             INSERT INTO location_statuses VALUES
                 (1, 'active', NULL),
-                (2, 'closed', NULL)
+                (2, 'closed', NULL),
+                (3, 'active', NULL)
             """
         )
 

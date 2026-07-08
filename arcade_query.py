@@ -26,6 +26,7 @@ from arcade_db import (
     ACTIVE_LOCATION_STATUSES,
     DEFAULT_DUCKDB,
     connect as duckdb_connect,
+    continental_us_state_literal_clause,
     has_table as duckdb_has_table,
 )
 
@@ -70,17 +71,23 @@ def has_table(conn: duckdb.DuckDBPyConnection, table_name: str) -> bool:
     return duckdb_has_table(conn, table_name)
 
 
-def location_status_join(conn: duckdb.DuckDBPyConnection, alias: str = "l") -> str:
+def location_status_join(conn: duckdb.DuckDBPyConnection, alias: str = "l", status_alias: str = "ls") -> str:
     if not has_table(conn, "location_statuses"):
         return ""
-    return f"LEFT JOIN location_statuses ls ON ls.location_id = {alias}.location_id"
+    return f"LEFT JOIN location_statuses {status_alias} ON {status_alias}.location_id = {alias}.location_id"
 
 
-def active_location_clause(conn: duckdb.DuckDBPyConnection, alias: str = "l", include_inactive: bool = False) -> str:
+def active_location_clause(
+    conn: duckdb.DuckDBPyConnection,
+    alias: str = "l",
+    status_alias: str = "ls",
+    include_inactive: bool = False,
+) -> str:
+    state_clause = continental_us_state_literal_clause(f"{alias}.state")
     if include_inactive or not has_table(conn, "location_statuses"):
-        return "1=1"
+        return state_clause
     quoted = ",".join(f"'{status}'" for status in ACTIVE_STATUSES)
-    return f"COALESCE(ls.status, 'active') IN ({quoted})"
+    return f"COALESCE({status_alias}.status, 'active') IN ({quoted}) AND {state_clause}"
 
 
 def status_columns(conn: duckdb.DuckDBPyConnection) -> str:
@@ -867,6 +874,10 @@ def source_coverage(conn: duckdb.DuckDBPyConnection, state: Optional[str], limit
 
 def duplicate_leads(conn: duckdb.DuckDBPyConnection, state: Optional[str], limit: int) -> QueryResult:
     state_clause = "AND a.state = ?" if state else ""
+    a_status_join = location_status_join(conn, "a", "als")
+    b_status_join = location_status_join(conn, "b", "bls")
+    a_active_clause = active_location_clause(conn, "a", "als")
+    b_active_clause = active_location_clause(conn, "b", "bls")
     params: list[Any] = []
     if state:
         params.append(state)
@@ -882,6 +893,7 @@ def duplicate_leads(conn: duckdb.DuckDBPyConnection, state: Optional[str], limit
         b.name AS right_name,
         b.street_address AS right_address
     FROM locations a
+    {a_status_join}
     JOIN locations b ON b.location_id > a.location_id
         AND COALESCE(a.state, '') = COALESCE(b.state, '')
         AND COALESCE(a.city, '') = COALESCE(b.city, '')
@@ -893,7 +905,10 @@ def duplicate_leads(conn: duckdb.DuckDBPyConnection, state: Optional[str], limit
                 AND lower(a.street_address) = lower(b.street_address)
             )
         )
+    {b_status_join}
     WHERE COALESCE(a.state, '') != ''
+      AND {a_active_clause}
+      AND {b_active_clause}
       {state_clause}
     ORDER BY a.state, a.city, a.name
     LIMIT ?
@@ -903,6 +918,7 @@ def duplicate_leads(conn: duckdb.DuckDBPyConnection, state: Optional[str], limit
 
 def review_queue(conn: duckdb.DuckDBPyConnection, state: Optional[str], limit: int) -> QueryResult:
     state_clause = "AND l.state = ?" if state else ""
+    active_clause = active_location_clause(conn)
     params: list[Any] = []
     if state:
         params.append(state)
@@ -929,7 +945,7 @@ def review_queue(conn: duckdb.DuckDBPyConnection, state: Optional[str], limit: i
     FROM locations l
     LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
     LEFT JOIN latest ON latest.location_id = l.location_id AND latest.rn = 1
-    WHERE COALESCE(ls.status, 'active') NOT IN ('closed', 'replaced')
+    WHERE {active_clause}
       {state_clause}
     GROUP BY l.location_id, l.name, l.city, l.state, l.game_count, COALESCE(ls.status, 'active')
     HAVING MAX(latest.checked_at) IS NULL OR COALESCE(l.game_count, 0) >= 25

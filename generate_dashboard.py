@@ -16,13 +16,12 @@ from typing import Any, Iterable
 
 import duckdb
 
-from arcade_db import ACTIVE_LOCATION_STATUSES
-from us_states import CONTINENTAL_US_STATES, US_STATES
+from arcade_db import active_atlas_location_clause, active_atlas_location_params
+from us_states import US_STATES
 
 
 DEFAULT_DB = Path("arcade_roadtrip.duckdb")
 DEFAULT_OUTPUT = Path("static/dashboard.html")
-ACTIVE_STATUSES = ACTIVE_LOCATION_STATUSES
 MIN_LAT = 24.396308
 MAX_LAT = 49.384358
 MIN_LON = -124.848974
@@ -60,14 +59,6 @@ def game_identity_cte(conn: duckdb.DuckDBPyConnection) -> str:
     """
 
 
-def active_status_clause() -> str:
-    return ",".join("?" for _ in ACTIVE_STATUSES)
-
-
-def state_clause() -> str:
-    return ",".join("?" for _ in CONTINENTAL_US_STATES)
-
-
 def rows(conn: duckdb.DuckDBPyConnection, sql: str, params: Iterable[Any]) -> list[dict[str, Any]]:
     result = conn.execute(sql, list(params))
     columns = [description[0] for description in result.description]
@@ -75,7 +66,7 @@ def rows(conn: duckdb.DuckDBPyConnection, sql: str, params: Iterable[Any]) -> li
 
 
 def load_location_metrics(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
-    params = [*ACTIVE_STATUSES, *CONTINENTAL_US_STATES, *ACTIVE_STATUSES, *CONTINENTAL_US_STATES]
+    params = [*active_atlas_location_params(), *active_atlas_location_params()]
     sql = f"""
     WITH {game_identity_cte(conn)},
     active_locations AS (
@@ -92,8 +83,7 @@ def load_location_metrics(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any
             l.longitude
         FROM locations l
         LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
-        WHERE COALESCE(ls.status, 'active') IN ({active_status_clause()})
-          AND l.state IN ({state_clause()})
+        WHERE {active_atlas_location_clause()}
     ),
     placement_identity AS (
         SELECT
@@ -110,8 +100,7 @@ def load_location_metrics(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any
         JOIN game_identity gi ON gi.game_id = lg.game_id
         JOIN locations l ON l.location_id = lg.location_id
         LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
-        WHERE COALESCE(ls.status, 'active') IN ({active_status_clause()})
-          AND l.state IN ({state_clause()})
+        WHERE {active_atlas_location_clause()}
         GROUP BY gi.canonical_game_id
     )
     SELECT

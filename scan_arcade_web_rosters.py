@@ -26,7 +26,14 @@ from urllib.request import Request, urlopen
 
 import duckdb
 
-from arcade_db import ACTIVE_LOCATION_STATUSES, DEFAULT_DUCKDB, connect, placeholders, rows
+from arcade_db import (
+    DEFAULT_DUCKDB,
+    active_atlas_location_clause,
+    active_atlas_location_params,
+    connect,
+    placeholders,
+    rows,
+)
 
 
 DEFAULT_REPORT_DIR = Path("reports")
@@ -174,10 +181,10 @@ def load_candidates(
     google_place_expr = "COALESCE(l.google_place_id, '')" if has_locations_column(conn, "google_place_id") else "''"
     source_count_expr = "COALESCE(l.game_count, 0)" if has_locations_column(conn, "game_count") else "0"
     filters = [
-        f"COALESCE(ls.status, 'active') IN ({placeholders(ACTIVE_LOCATION_STATUSES)})",
+        active_atlas_location_clause(),
         f"{website_expr} <> ''",
     ]
-    params: list[Any] = [*ACTIVE_LOCATION_STATUSES]
+    params: list[Any] = [*active_atlas_location_params()]
     if state:
         filters.append("upper(COALESCE(l.state, '')) = upper(?)")
         params.append(state)

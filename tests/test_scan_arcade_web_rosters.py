@@ -76,7 +76,8 @@ class WebRosterReporterTests(unittest.TestCase):
                     (1, 'Big Open Arcade', 'Orlando', 'FL', 2, 'big.example', 'PlaceBig'),
                     (2, 'Small Open Arcade', 'Orlando', 'FL', 1, 'small.example', 'PlaceSmall'),
                     (3, 'Big Closed Arcade', 'Orlando', 'FL', 2, 'closed.example', 'PlaceClosed'),
-                    (4, 'Big Missing Website', 'Orlando', 'FL', 2, '', 'PlaceMissing')
+                    (4, 'Big Missing Website', 'Orlando', 'FL', 2, '', 'PlaceMissing'),
+                    (5, 'International Arcade', 'Rotterdam', 'NL', 2, 'nl.example', 'PlaceNL')
                 """
             )
             conn.execute(
@@ -85,7 +86,8 @@ class WebRosterReporterTests(unittest.TestCase):
                     (1, 10), (1, 11),
                     (2, 10),
                     (3, 10), (3, 11),
-                    (4, 10), (4, 11)
+                    (4, 10), (4, 11),
+                    (5, 10), (5, 11)
                 """
             )
             conn.execute(
@@ -94,7 +96,8 @@ class WebRosterReporterTests(unittest.TestCase):
                     (1, 'active'),
                     (2, 'active'),
                     (3, 'closed'),
-                    (4, 'active')
+                    (4, 'active'),
+                    (5, 'active')
                 """
             )
 

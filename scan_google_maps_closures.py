@@ -21,8 +21,15 @@ from typing import Any, Iterable
 
 import duckdb
 
-from arcade_db import DEFAULT_DUCKDB, connect as duckdb_connect, execute_script, has_table, rows as duckdb_rows
-from us_states import CONTINENTAL_US_STATES
+from arcade_db import (
+    DEFAULT_DUCKDB,
+    connect as duckdb_connect,
+    continental_us_state_clause,
+    continental_us_state_params,
+    execute_script,
+    has_table,
+    rows as duckdb_rows,
+)
 
 
 DEFAULT_DB = DEFAULT_DUCKDB
@@ -34,7 +41,6 @@ DEFAULT_MAX_DELAY_SECONDS = 150.0
 DEFAULT_STALE_DAYS = 180
 DEFAULT_LIMIT = 50
 RAW_TEXT_LIMIT = 12_000
-CONTINENTAL_US_STATE_SQL = ",".join("?" for _ in CONTINENTAL_US_STATES)
 
 PERMANENT_CLOSURE_PATTERNS = (
     re.compile(r"\bpermanently\s+closed\b", re.IGNORECASE),
@@ -446,8 +452,8 @@ def load_scan_candidates(
     if not has_table(conn, "location_statuses"):
         status_join = ""
         status_expr = "'active'"
-    state_filter = f"AND upper(l.state) IN ({CONTINENTAL_US_STATE_SQL})"
-    params.extend(CONTINENTAL_US_STATES)
+    state_filter = f"AND {continental_us_state_clause('l.state')}"
+    params.extend(continental_us_state_params())
     if state:
         state_filter += " AND upper(l.state) = upper(?)"
         params.append(state)

@@ -15,15 +15,14 @@ from typing import Any, Iterable
 
 import duckdb
 
-from arcade_db import ACTIVE_LOCATION_STATUSES
-from us_states import CONTINENTAL_US_STATES
+from arcade_db import (
+    active_atlas_location_clause,
+    active_atlas_location_params,
+)
 
 
 DEFAULT_DB = Path("arcade_roadtrip.duckdb")
 DEFAULT_OUTPUT_DIR = Path("static/data")
-ACTIVE_STATUSES = ACTIVE_LOCATION_STATUSES
-
-
 def connect(db_path: Path) -> duckdb.DuckDBPyConnection:
     return duckdb.connect(str(db_path), read_only=True)
 
@@ -64,10 +63,6 @@ def game_identity_cte(conn: duckdb.DuckDBPyConnection) -> str:
     """
 
 
-def placeholders(values: Iterable[Any]) -> str:
-    return ",".join("?" for _ in values)
-
-
 def rows(conn: duckdb.DuckDBPyConnection, sql: str, params: Iterable[Any]) -> list[dict[str, Any]]:
     result = conn.execute(sql, list(params))
     columns = [description[0] for description in result.description]
@@ -75,9 +70,7 @@ def rows(conn: duckdb.DuckDBPyConnection, sql: str, params: Iterable[Any]) -> li
 
 
 def load_route_locations(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
-    status_sql = placeholders(ACTIVE_STATUSES)
-    state_sql = placeholders(CONTINENTAL_US_STATES)
-    params = [*ACTIVE_STATUSES, *CONTINENTAL_US_STATES]
+    params = active_atlas_location_params()
     sql = f"""
     WITH {game_identity_cte(conn)},
     active_locations AS (
@@ -95,8 +88,7 @@ def load_route_locations(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]
             COALESCE(ls.status, 'active') AS status
         FROM locations l
         LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
-        WHERE COALESCE(ls.status, 'active') IN ({status_sql})
-          AND l.state IN ({state_sql})
+        WHERE {active_atlas_location_clause()}
           AND l.latitude IS NOT NULL
           AND l.longitude IS NOT NULL
     )
@@ -149,15 +141,10 @@ def load_route_locations(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]
 
 
 def load_location_games(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
-    status_sql = placeholders(ACTIVE_STATUSES)
-    state_sql = placeholders(CONTINENTAL_US_STATES)
     params = [
-        *ACTIVE_STATUSES,
-        *CONTINENTAL_US_STATES,
-        *ACTIVE_STATUSES,
-        *CONTINENTAL_US_STATES,
-        *ACTIVE_STATUSES,
-        *CONTINENTAL_US_STATES,
+        *active_atlas_location_params(),
+        *active_atlas_location_params(),
+        *active_atlas_location_params(),
     ]
     sql = f"""
     WITH {game_identity_cte(conn)},
@@ -165,8 +152,7 @@ def load_location_games(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]
         SELECT l.location_id, l.state
         FROM locations l
         LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
-        WHERE COALESCE(ls.status, 'active') IN ({status_sql})
-          AND l.state IN ({state_sql})
+        WHERE {active_atlas_location_clause()}
     ),
     us_counts AS (
         SELECT gi.canonical_game_id, COUNT(DISTINCT lg.location_id) AS us_location_count
@@ -174,8 +160,7 @@ def load_location_games(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]
         JOIN game_identity gi ON gi.game_id = lg.game_id
         JOIN locations l ON l.location_id = lg.location_id
         LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
-        WHERE COALESCE(ls.status, 'active') IN ({status_sql})
-          AND l.state IN ({state_sql})
+        WHERE {active_atlas_location_clause()}
         GROUP BY gi.canonical_game_id
     ),
     state_counts AS (
@@ -184,8 +169,7 @@ def load_location_games(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]
         JOIN game_identity gi ON gi.game_id = lg.game_id
         JOIN locations l ON l.location_id = lg.location_id
         LEFT JOIN location_statuses ls ON ls.location_id = l.location_id
-        WHERE COALESCE(ls.status, 'active') IN ({status_sql})
-          AND l.state IN ({state_sql})
+        WHERE {active_atlas_location_clause()}
         GROUP BY gi.canonical_game_id, l.state
     )
     SELECT
