@@ -162,7 +162,9 @@ class GoogleMapsClosureScanTests(unittest.TestCase):
                 INSERT INTO locations VALUES
                     (1, 'Old Arcade', '1 Main', 'Orlando', 'FL', '32830', 10),
                     (2, 'Recent Arcade', '2 Main', 'Orlando', 'FL', '32830', 10),
-                    (3, 'Closed Arcade', '3 Main', 'Orlando', 'FL', '32830', 10)
+                    (3, 'Closed Arcade', '3 Main', 'Orlando', 'FL', '32830', 10),
+                    (4, 'International Arcade', '4 Main', 'Rotterdam', 'NL', '3024', 100),
+                    (5, 'Blank State Arcade', '5 Main', '', '', '', 100)
                 """
             )
             conn.execute(
@@ -184,7 +186,7 @@ class GoogleMapsClosureScanTests(unittest.TestCase):
 
             candidates = load_scan_candidates(
                 conn,
-                state="FL",
+                state=None,
                 limit=10,
                 min_game_count=1,
                 stale_days=180,

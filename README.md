@@ -165,8 +165,10 @@ is passed. It also captures Google place ids, website URLs, rendered addresses,
 and coordinates for review. Missing `locations.website_url`,
 `locations.google_place_id`, `locations.google_cid`, address, and coordinate
 fields are filled in apply mode; existing values are only overwritten with
-`--overwrite-existing-details`. The default automatic scan is deliberately
-slow, with a random 45-150 second delay between requests:
+`--overwrite-existing-details`. Automatic candidate selection is scoped to
+active continental U.S. locations, matching the static atlas. The default
+automatic scan is deliberately slow, with a random 45-150 second delay between
+requests:
 
 ```bash
 .venv/bin/python -m playwright install chromium
