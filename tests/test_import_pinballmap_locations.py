@@ -1,11 +1,13 @@
 import csv
 import contextlib
 import io
-import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
+import duckdb
+
+from arcade_db import execute_script
 from import_pinballmap_locations import (
     ExistingLocation,
     ImportBundle,
@@ -43,6 +45,14 @@ HEADERS = [
     "Machine type [Machines]",
     "Machine display [Machines]",
 ]
+
+
+def memory_db() -> duckdb.DuckDBPyConnection:
+    return duckdb.connect(":memory:")
+
+
+def setup_schema(conn: duckdb.DuckDBPyConnection, script: str) -> None:
+    execute_script(conn, script)
 
 
 class PinballMapImportTests(unittest.TestCase):
@@ -161,48 +171,48 @@ class PinballMapImportTests(unittest.TestCase):
         self.assertIsNone(match)
 
     def test_import_uses_manual_location_override(self):
-        conn = sqlite3.connect(":memory:")
-        conn.executescript(
+        conn = memory_db()
+        setup_schema(
+            conn,
             """
-            CREATE TABLE location_types (type TEXT PRIMARY KEY);
+            CREATE TABLE location_types (type VARCHAR);
             CREATE TABLE locations (
-                location_id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                type TEXT,
-                city TEXT,
-                state TEXT,
-                street_address TEXT,
-                postal_code TEXT,
-                phone TEXT,
-                address_text TEXT,
-                website_url TEXT,
-                is_public INTEGER,
-                game_count INTEGER,
-                unique_game_count INTEGER,
-                world_record_count INTEGER,
-                updated_text TEXT,
-                description TEXT,
-                latitude REAL,
-                longitude REAL,
-                detail_fetched_at TEXT,
-                source_url TEXT NOT NULL
+                location_id BIGINT,
+                name VARCHAR NOT NULL,
+                type VARCHAR,
+                city VARCHAR,
+                state VARCHAR,
+                street_address VARCHAR,
+                postal_code VARCHAR,
+                phone VARCHAR,
+                address_text VARCHAR,
+                website_url VARCHAR,
+                is_public BIGINT,
+                game_count BIGINT,
+                unique_game_count BIGINT,
+                world_record_count BIGINT,
+                updated_text VARCHAR,
+                description VARCHAR,
+                latitude DOUBLE,
+                longitude DOUBLE,
+                detail_fetched_at VARCHAR,
+                source_url VARCHAR NOT NULL
             );
             CREATE TABLE games (
-                game_id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                manufacturer TEXT
+                game_id BIGINT,
+                name VARCHAR NOT NULL,
+                manufacturer VARCHAR
             );
             CREATE TABLE location_games (
-                location_id INTEGER NOT NULL,
-                game_id INTEGER NOT NULL,
-                cabinet_type TEXT,
-                year INTEGER,
-                players INTEGER,
-                controls_condition INTEGER,
-                screen_condition INTEGER,
-                cabinet_condition INTEGER,
-                fetched_at TEXT NOT NULL,
-                PRIMARY KEY (location_id, game_id)
+                location_id BIGINT NOT NULL,
+                game_id BIGINT NOT NULL,
+                cabinet_type VARCHAR,
+                year BIGINT,
+                players BIGINT,
+                controls_condition BIGINT,
+                screen_condition BIGINT,
+                cabinet_condition BIGINT,
+                fetched_at VARCHAR NOT NULL
             );
             INSERT INTO locations(location_id, name, city, state, street_address, postal_code, game_count, source_url)
             VALUES (695, 'Nickel Mania', 'West Jordan', 'UT', '3763 Center Park Drive, Suite 110', '84084', 71, 'https://www.aurcade.com/locations/view.aspx?id=695');
@@ -279,48 +289,48 @@ class PinballMapImportTests(unittest.TestCase):
         self.assertIsNone(match)
 
     def test_import_preserves_existing_aurcade_counts_and_fetched_at(self):
-        conn = sqlite3.connect(":memory:")
-        conn.executescript(
+        conn = memory_db()
+        setup_schema(
+            conn,
             """
-            CREATE TABLE location_types (type TEXT PRIMARY KEY);
+            CREATE TABLE location_types (type VARCHAR);
             CREATE TABLE locations (
-                location_id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                type TEXT,
-                city TEXT,
-                state TEXT,
-                street_address TEXT,
-                postal_code TEXT,
-                phone TEXT,
-                address_text TEXT,
-                website_url TEXT,
-                is_public INTEGER,
-                game_count INTEGER,
-                unique_game_count INTEGER,
-                world_record_count INTEGER,
-                updated_text TEXT,
-                description TEXT,
-                latitude REAL,
-                longitude REAL,
-                detail_fetched_at TEXT,
-                source_url TEXT NOT NULL
+                location_id BIGINT,
+                name VARCHAR NOT NULL,
+                type VARCHAR,
+                city VARCHAR,
+                state VARCHAR,
+                street_address VARCHAR,
+                postal_code VARCHAR,
+                phone VARCHAR,
+                address_text VARCHAR,
+                website_url VARCHAR,
+                is_public BIGINT,
+                game_count BIGINT,
+                unique_game_count BIGINT,
+                world_record_count BIGINT,
+                updated_text VARCHAR,
+                description VARCHAR,
+                latitude DOUBLE,
+                longitude DOUBLE,
+                detail_fetched_at VARCHAR,
+                source_url VARCHAR NOT NULL
             );
             CREATE TABLE games (
-                game_id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                manufacturer TEXT
+                game_id BIGINT,
+                name VARCHAR NOT NULL,
+                manufacturer VARCHAR
             );
             CREATE TABLE location_games (
-                location_id INTEGER NOT NULL,
-                game_id INTEGER NOT NULL,
-                cabinet_type TEXT,
-                year INTEGER,
-                players INTEGER,
-                controls_condition INTEGER,
-                screen_condition INTEGER,
-                cabinet_condition INTEGER,
-                fetched_at TEXT NOT NULL,
-                PRIMARY KEY (location_id, game_id)
+                location_id BIGINT NOT NULL,
+                game_id BIGINT NOT NULL,
+                cabinet_type VARCHAR,
+                year BIGINT,
+                players BIGINT,
+                controls_condition BIGINT,
+                screen_condition BIGINT,
+                cabinet_condition BIGINT,
+                fetched_at VARCHAR NOT NULL
             );
             INSERT INTO locations(location_id, name, city, state, street_address, postal_code, game_count, source_url)
             VALUES (700, 'Nickel Mania', 'Murray', 'UT', '6051 South State', '84107', 105, 'https://www.aurcade.com/locations/view.aspx?id=700');
@@ -398,48 +408,48 @@ class PinballMapImportTests(unittest.TestCase):
         self.assertEqual(fetched_at, "aurcade-fetch")
 
     def test_import_bundle_skips_ambiguous_location_inserts(self):
-        conn = sqlite3.connect(":memory:")
-        conn.executescript(
+        conn = memory_db()
+        setup_schema(
+            conn,
             """
-            CREATE TABLE location_types (type TEXT PRIMARY KEY);
+            CREATE TABLE location_types (type VARCHAR);
             CREATE TABLE locations (
-                location_id INTEGER PRIMARY KEY,
-                name TEXT,
-                type TEXT,
-                city TEXT,
-                state TEXT,
-                street_address TEXT,
-                postal_code TEXT,
-                phone TEXT,
-                address_text TEXT,
-                website_url TEXT,
-                is_public INTEGER,
-                game_count INTEGER,
-                unique_game_count INTEGER,
-                world_record_count INTEGER,
-                updated_text TEXT,
-                description TEXT,
-                latitude REAL,
-                longitude REAL,
-                detail_fetched_at TEXT,
-                source_url TEXT
+                location_id BIGINT,
+                name VARCHAR,
+                type VARCHAR,
+                city VARCHAR,
+                state VARCHAR,
+                street_address VARCHAR,
+                postal_code VARCHAR,
+                phone VARCHAR,
+                address_text VARCHAR,
+                website_url VARCHAR,
+                is_public BIGINT,
+                game_count BIGINT,
+                unique_game_count BIGINT,
+                world_record_count BIGINT,
+                updated_text VARCHAR,
+                description VARCHAR,
+                latitude DOUBLE,
+                longitude DOUBLE,
+                detail_fetched_at VARCHAR,
+                source_url VARCHAR
             );
             CREATE TABLE games (
-                game_id INTEGER PRIMARY KEY,
-                name TEXT,
-                manufacturer TEXT
+                game_id BIGINT,
+                name VARCHAR,
+                manufacturer VARCHAR
             );
             CREATE TABLE location_games (
-                location_id INTEGER,
-                game_id INTEGER,
-                cabinet_type TEXT,
-                year INTEGER,
-                players INTEGER,
-                controls_condition INTEGER,
-                screen_condition INTEGER,
-                cabinet_condition INTEGER,
-                fetched_at TEXT,
-                PRIMARY KEY (location_id, game_id)
+                location_id BIGINT,
+                game_id BIGINT,
+                cabinet_type VARCHAR,
+                year BIGINT,
+                players BIGINT,
+                controls_condition BIGINT,
+                screen_condition BIGINT,
+                cabinet_condition BIGINT,
+                fetched_at VARCHAR
             );
             INSERT INTO locations(location_id, name, city, state, street_address, postal_code, source_url)
             VALUES (10, 'Quarters Arcade Bar', 'Salt Lake City', 'UT', '5 E 400 S', '84111', 'aurcade');

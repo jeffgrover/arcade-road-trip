@@ -27,7 +27,6 @@ from import_pinballmap_locations import (
     DEFAULT_LOCATION_MATCH_THRESHOLD,
     ImportBundle,
     best_location_candidate,
-    connect as connect_pinballmap,
     import_bundle,
     load_existing_locations,
 )
@@ -398,30 +397,26 @@ def main() -> int:
                     f"{len(pinballmap_bundle.machines)} machines, "
                     f"{len(pinballmap_bundle.placements)} placements"
                 )
-                pm_conn = connect_pinballmap(args.db, readonly=not args.apply)
-                try:
-                    progress("finding ambiguous Pinball Map location candidates")
-                    possibles = pinballmap_possible_matches(
-                        pm_conn,
-                        pinballmap_bundle,
-                        DEFAULT_LOCATION_MATCH_THRESHOLD,
-                    )
-                    progress(f"Pinball Map possible matches for review: {len(possibles)}")
-                    report_paths.append(write_pinballmap_possible_report(args.report_dir, possibles))
-                    progress("running Pinball Map import bundle")
-                    import_bundle(
-                        pm_conn,
-                        pinballmap_bundle,
-                        apply=args.apply,
-                        insert_unmatched_locations=True,
-                        insert_unmatched_games=True,
-                        location_match_threshold=DEFAULT_LOCATION_MATCH_THRESHOLD,
-                        game_match_threshold=DEFAULT_GAME_MATCH_THRESHOLD,
-                        verbose=False,
-                        ambiguous_location_threshold=PINBALLMAP_AMBIGUOUS_THRESHOLD,
-                    )
-                finally:
-                    pm_conn.close()
+                progress("finding ambiguous Pinball Map location candidates")
+                possibles = pinballmap_possible_matches(
+                    conn,
+                    pinballmap_bundle,
+                    DEFAULT_LOCATION_MATCH_THRESHOLD,
+                )
+                progress(f"Pinball Map possible matches for review: {len(possibles)}")
+                report_paths.append(write_pinballmap_possible_report(args.report_dir, possibles))
+                progress("running Pinball Map import bundle")
+                import_bundle(
+                    conn,
+                    pinballmap_bundle,
+                    apply=args.apply,
+                    insert_unmatched_locations=True,
+                    insert_unmatched_games=True,
+                    location_match_threshold=DEFAULT_LOCATION_MATCH_THRESHOLD,
+                    game_match_threshold=DEFAULT_GAME_MATCH_THRESHOLD,
+                    verbose=False,
+                    ambiguous_location_threshold=PINBALLMAP_AMBIGUOUS_THRESHOLD,
+                )
 
             progress("writing national data quality report")
             report_paths.append(write_quality_report(args.report_dir, conn, states, ziv_matches, pinballmap_bundle))

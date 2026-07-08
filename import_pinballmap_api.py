@@ -33,8 +33,10 @@ from import_pinballmap_locations import (
 )
 from us_states import add_state_selection_args, normalize_state, selected_states
 
+from arcade_db import DEFAULT_DUCKDB
 
-DEFAULT_DB = Path("aurcade_locations.sqlite")
+
+DEFAULT_DB = DEFAULT_DUCKDB
 DEFAULT_CACHE_DIR = Path("cache/pinballmap_api")
 PINBALLMAP_API = "https://pinballmap.com/api/v1"
 USER_AGENT = "arcade-road-trip-pinballmap-importer/0.1 (personal local data curation)"

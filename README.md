@@ -132,18 +132,19 @@ default and writes review reports under `reports/`:
 .venv/bin/python curate_us_sources.py --all-continental-us
 ```
 
-These source-enrichment scripts are still SQLite-era writers and are the next
-porting target. Apply mode makes a SQLite backup unless `--skip-backup` is
-passed; `arcade_query.py` no longer runs lazy source verification against the
-canonical DuckDB file until the verifier itself is ported.
+The top-level source curation wrapper is still transitional while ZIv and OSM
+validation are being ported. Apply mode makes a SQLite backup unless
+`--skip-backup` is passed; `arcade_query.py` no longer runs lazy source
+verification against the canonical DuckDB file until the verifier itself is
+ported.
 
 ```bash
 .venv/bin/python curate_us_sources.py --all-continental-us --apply
 ```
 
-Pinball Map national ingestion uses the public API with cached, rate-limited
-region calls. The CSV importer is still available for privileged/admin exports,
-but it is not the national path.
+Pinball Map national ingestion is DuckDB-native and uses the public API with
+cached, rate-limited region calls. The CSV importer is still available for
+privileged/admin exports, but it is not the national path.
 
 ## Quick Checks
 

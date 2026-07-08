@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Import a Pinball Map CSV into the existing Aurcade SQLite schema.
+"""Import Pinball Map data into the canonical Arcade Road Trip DuckDB database.
 
 The Aurcade schema uses source-native integer primary keys. Pinball Map ids
 share the same integer shape but not the same namespace, so this importer keeps
@@ -14,11 +14,14 @@ import argparse
 import csv
 import difflib
 import re
-import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Optional
+
+import duckdb
+
+from arcade_db import DEFAULT_DUCKDB, connect as duckdb_connect, execute_script
 
 
 PINBALLMAP_ID_OFFSET = 1_000_000_000
@@ -469,13 +472,13 @@ def best_game_match(
     return None
 
 
-def load_existing_locations(conn: sqlite3.Connection) -> list[ExistingLocation]:
+def load_existing_locations(conn: duckdb.DuckDBPyConnection) -> list[ExistingLocation]:
     rows = conn.execute(
         """
         SELECT location_id, name, city, state, street_address, postal_code
         FROM locations
         """
-    )
+    ).fetchall()
     return [
         ExistingLocation(
             location_id=int(row[0]),
@@ -489,8 +492,8 @@ def load_existing_locations(conn: sqlite3.Connection) -> list[ExistingLocation]:
     ]
 
 
-def load_existing_games(conn: sqlite3.Connection) -> list[ExistingGame]:
-    rows = conn.execute("SELECT game_id, name, manufacturer FROM games")
+def load_existing_games(conn: duckdb.DuckDBPyConnection) -> list[ExistingGame]:
+    rows = conn.execute("SELECT game_id, name, manufacturer FROM games").fetchall()
     return [
         ExistingGame(game_id=int(row[0]), name=str(row[1]), manufacturer=row[2])
         for row in rows
@@ -498,58 +501,67 @@ def load_existing_games(conn: sqlite3.Connection) -> list[ExistingGame]:
 
 
 def coalesced_update_location(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     location_id: int,
     location: PinballMapLocation,
     fetched_at: str,
     source_url: str,
 ) -> None:
-    conn.execute(
-        """
-        INSERT INTO locations (
-            location_id, name, type, city, state, street_address, postal_code,
-            phone, address_text, website_url, game_count, updated_text,
-            description, latitude, longitude, detail_fetched_at, source_url
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(location_id) DO UPDATE SET
-            name=COALESCE(locations.name, excluded.name),
-            type=COALESCE(locations.type, excluded.type),
-            city=COALESCE(locations.city, excluded.city),
-            state=COALESCE(locations.state, excluded.state),
-            street_address=COALESCE(locations.street_address, excluded.street_address),
-            postal_code=COALESCE(locations.postal_code, excluded.postal_code),
-            phone=COALESCE(locations.phone, excluded.phone),
-            address_text=COALESCE(locations.address_text, excluded.address_text),
-            website_url=COALESCE(locations.website_url, excluded.website_url),
-            game_count=COALESCE(locations.game_count, excluded.game_count),
-            updated_text=COALESCE(locations.updated_text, excluded.updated_text),
-            description=COALESCE(locations.description, excluded.description),
-            latitude=COALESCE(locations.latitude, excluded.latitude),
-            longitude=COALESCE(locations.longitude, excluded.longitude),
-            detail_fetched_at=COALESCE(locations.detail_fetched_at, excluded.detail_fetched_at),
-            source_url=COALESCE(locations.source_url, excluded.source_url)
-        """,
-        (
-            location_id,
-            location.name,
-            location.location_type,
-            location.city,
-            location.state,
-            location.street_address,
-            location.postal_code,
-            location.phone,
-            build_address_text(location),
-            location.website_url,
-            location.machine_count,
-            location.updated_text,
-            location.description,
-            location.latitude,
-            location.longitude,
-            fetched_at,
-            source_url,
-        ),
+    values = (
+        location_id,
+        location.name,
+        location.location_type,
+        location.city,
+        location.state,
+        location.street_address,
+        location.postal_code,
+        location.phone,
+        build_address_text(location),
+        location.website_url,
+        location.machine_count,
+        location.updated_text,
+        location.description,
+        location.latitude,
+        location.longitude,
+        fetched_at,
+        source_url,
     )
+    if conn.execute("SELECT 1 FROM locations WHERE location_id = ?", (location_id,)).fetchone():
+        conn.execute(
+            """
+            UPDATE locations SET
+                name=COALESCE(name, ?),
+                type=COALESCE(type, ?),
+                city=COALESCE(city, ?),
+                state=COALESCE(state, ?),
+                street_address=COALESCE(street_address, ?),
+                postal_code=COALESCE(postal_code, ?),
+                phone=COALESCE(phone, ?),
+                address_text=COALESCE(address_text, ?),
+                website_url=COALESCE(website_url, ?),
+                game_count=COALESCE(game_count, ?),
+                updated_text=COALESCE(updated_text, ?),
+                description=COALESCE(description, ?),
+                latitude=COALESCE(latitude, ?),
+                longitude=COALESCE(longitude, ?),
+                detail_fetched_at=COALESCE(detail_fetched_at, ?),
+                source_url=COALESCE(source_url, ?)
+            WHERE location_id = ?
+            """,
+            (*values[1:], location_id),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO locations (
+                location_id, name, type, city, state, street_address, postal_code,
+                phone, address_text, website_url, game_count, updated_text,
+                description, latitude, longitude, detail_fetched_at, source_url
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            values,
+        )
 
 
 def build_address_text(location: PinballMapLocation) -> Optional[str]:
@@ -566,52 +578,68 @@ def build_address_text(location: PinballMapLocation) -> Optional[str]:
     return "\n".join(part for part in parts if part) or None
 
 
-def upsert_game(conn: sqlite3.Connection, game_id: int, machine: PinballMapMachine) -> None:
-    conn.execute(
-        """
-        INSERT INTO games(game_id, name, manufacturer)
-        VALUES (?, ?, ?)
-        ON CONFLICT(game_id) DO UPDATE SET
-            name=COALESCE(games.name, excluded.name),
-            manufacturer=COALESCE(games.manufacturer, excluded.manufacturer)
-        """,
-        (game_id, machine.name, machine.manufacturer),
-    )
+def upsert_game(conn: duckdb.DuckDBPyConnection, game_id: int, machine: PinballMapMachine) -> None:
+    if conn.execute("SELECT 1 FROM games WHERE game_id = ?", (game_id,)).fetchone():
+        conn.execute(
+            """
+            UPDATE games SET
+                name=COALESCE(name, ?),
+                manufacturer=COALESCE(manufacturer, ?)
+            WHERE game_id = ?
+            """,
+            (machine.name, machine.manufacturer, game_id),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO games(game_id, name, manufacturer) VALUES (?, ?, ?)",
+            (game_id, machine.name, machine.manufacturer),
+        )
 
 
 def upsert_location_game(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     location_id: int,
     game_id: int,
     machine: PinballMapMachine,
     fetched_at: str,
 ) -> None:
-    conn.execute(
-        """
-        INSERT INTO location_games (
-            location_id, game_id, cabinet_type, year, players,
-            controls_condition, screen_condition, cabinet_condition, fetched_at
+    if conn.execute(
+        "SELECT 1 FROM location_games WHERE location_id = ? AND game_id = ?",
+        (location_id, game_id),
+    ).fetchone():
+        conn.execute(
+            """
+            UPDATE location_games SET
+                cabinet_type=COALESCE(cabinet_type, ?),
+                year=COALESCE(year, ?),
+                fetched_at=COALESCE(fetched_at, ?)
+            WHERE location_id = ? AND game_id = ?
+            """,
+            ("Pinball", machine.year, fetched_at, location_id, game_id),
         )
-        VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, ?)
-        ON CONFLICT(location_id, game_id) DO UPDATE SET
-            cabinet_type=COALESCE(location_games.cabinet_type, excluded.cabinet_type),
-            year=COALESCE(location_games.year, excluded.year),
-            fetched_at=COALESCE(location_games.fetched_at, excluded.fetched_at)
-        """,
-        (location_id, game_id, "Pinball", machine.year, fetched_at),
-    )
+    else:
+        conn.execute(
+            """
+            INSERT INTO location_games (
+                location_id, game_id, cabinet_type, year, players,
+                controls_condition, screen_condition, cabinet_condition, fetched_at
+            )
+            VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, ?)
+            """,
+            (location_id, game_id, "Pinball", machine.year, fetched_at),
+        )
 
 
-def ensure_pinballmap_link_schema(conn: sqlite3.Connection) -> None:
-    conn.executescript(
+def ensure_pinballmap_link_schema(conn: duckdb.DuckDBPyConnection) -> None:
+    execute_script(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS pinballmap_location_links (
-            location_id INTEGER NOT NULL REFERENCES locations(location_id) ON DELETE CASCADE,
-            pinballmap_location_id INTEGER NOT NULL,
-            confidence REAL NOT NULL,
-            method TEXT NOT NULL,
-            linked_at TEXT NOT NULL,
-            PRIMARY KEY (location_id, pinballmap_location_id)
+            location_id BIGINT NOT NULL,
+            pinballmap_location_id BIGINT NOT NULL,
+            confidence DOUBLE NOT NULL,
+            method VARCHAR NOT NULL,
+            linked_at VARCHAR NOT NULL
         );
 
         CREATE INDEX IF NOT EXISTS idx_pinballmap_location_links_pinballmap
@@ -620,19 +648,12 @@ def ensure_pinballmap_link_schema(conn: sqlite3.Connection) -> None:
     )
 
 
-def connect(path: Path, readonly: bool) -> sqlite3.Connection:
-    if readonly:
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-    else:
-        conn = sqlite3.connect(path)
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.execute("PRAGMA busy_timeout=10000")
-    return conn
+def connect(path: Path, readonly: bool) -> duckdb.DuckDBPyConnection:
+    return duckdb_connect(path, read_only=readonly)
 
 
 def import_bundle(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     bundle: ImportBundle,
     *,
     apply: bool,
@@ -733,9 +754,11 @@ def import_bundle(
     if not apply:
         return stats
 
-    with conn:
+    conn.execute("BEGIN TRANSACTION")
+    try:
         ensure_pinballmap_link_schema(conn)
-        conn.execute("INSERT OR IGNORE INTO location_types(type) VALUES (?)", ("Pinball Map",))
+        if not conn.execute("SELECT 1 FROM location_types WHERE type = ?", ("Pinball Map",)).fetchone():
+            conn.execute("INSERT INTO location_types(type) VALUES (?)", ("Pinball Map",))
         for location in bundle.locations:
             location_id = location_ids.get(location.pinballmap_location_id)
             if location_id is None:
@@ -778,19 +801,27 @@ def import_bundle(
                 confidence = 1.0
                 method = "pinballmap_reused"
             link_rows.append((location_id, pinballmap_location_id, confidence, method, fetched_at))
-        conn.executemany(
-            """
-            INSERT INTO pinballmap_location_links (
-                location_id, pinballmap_location_id, confidence, method, linked_at
+        for row in link_rows:
+            conn.execute(
+                """
+                DELETE FROM pinballmap_location_links
+                WHERE location_id = ? AND pinballmap_location_id = ?
+                """,
+                row[:2],
             )
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(location_id, pinballmap_location_id) DO UPDATE SET
-                confidence = excluded.confidence,
-                method = excluded.method,
-                linked_at = excluded.linked_at
-            """,
-            link_rows,
-        )
+            conn.execute(
+                """
+                INSERT INTO pinballmap_location_links (
+                    location_id, pinballmap_location_id, confidence, method, linked_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                row,
+            )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
 
     return stats
 
@@ -864,14 +895,14 @@ def print_plan(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Transform a Pinball Map location CSV into the Aurcade SQLite schema."
+        description="Transform a Pinball Map location CSV into the canonical DuckDB database."
     )
     parser.add_argument("csv_paths", nargs="+", type=Path, help="One or more Pinball Map CSV export paths")
     parser.add_argument(
         "--db",
         type=Path,
-        default=Path("aurcade_locations.sqlite"),
-        help="SQLite database path (default: aurcade_locations.sqlite)",
+        default=DEFAULT_DUCKDB,
+        help=f"DuckDB database path (default: {DEFAULT_DUCKDB})",
     )
     parser.add_argument(
         "--apply",
