@@ -1,14 +1,24 @@
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
+from pathlib import Path
+from unittest.mock import patch
 
 import duckdb
 
 from scan_arcade_web_rosters import (
+    LinkHint,
     PageSummaryParser,
+    PageFetchResult,
+    ProbeResult,
     RosterPageResult,
     compare_roster_to_database,
+    extract_acam_machine_names,
+    discover_roster_pages,
     extract_machine_name_candidates,
     extract_pinside_machine_names,
     is_internal_url,
+    known_roster_link_hints,
     should_follow_roster_url,
     load_candidates,
     load_location_game_names,
@@ -87,6 +97,65 @@ class WebRosterReporterTests(unittest.TestCase):
             )
         )
 
+    def test_known_roster_link_hints_include_funspot_acam(self):
+        hints = known_roster_link_hints(1)
+
+        self.assertEqual(len(hints), 1)
+        self.assertEqual(hints[0].text, "American Classic Arcade Museum Games")
+        self.assertEqual(hints[0].url, "https://www.classicarcademuseum.org/games")
+        self.assertEqual(known_roster_link_hints(999999), [])
+
+    def test_discover_roster_pages_follows_explicit_known_external_hints(self):
+        probe = ProbeResult(
+            ok=True,
+            final_url="https://funspotnh.com",
+            status_code=200,
+            content_type="text/html",
+            title="Funspot",
+            roster_score=1,
+            link_hints=[LinkHint("GAMES", "https://www.funspotnh.com/games.php", 1)],
+            cache_path="/tmp/home.html",
+            error="",
+        )
+        fetched_urls = []
+
+        def fake_fetch(url, cache_dir, timeout_seconds, max_bytes):
+            fetched_urls.append(url)
+            return PageFetchResult(
+                ok=True,
+                final_url=url,
+                status_code=200,
+                content_type="text/html",
+                title="ACAM Games",
+                links=[],
+                text="Pac-Man\nGalaga",
+                cache_path="/tmp/acam.html",
+                error="",
+            )
+
+        with patch("scan_arcade_web_rosters.fetch_page", fake_fetch), redirect_stdout(StringIO()):
+            pages = discover_roster_pages(
+                probe,
+                Path("/tmp"),
+                timeout_seconds=1,
+                max_bytes=1000,
+                max_pages=1,
+                delay_seconds=0,
+                allow_trusted_external=False,
+                extra_hints=[
+                    LinkHint(
+                        "American Classic Arcade Museum Games",
+                        "https://www.classicarcademuseum.org/games",
+                        10,
+                    )
+                ],
+            )
+
+        self.assertEqual(len(pages), 1)
+        self.assertEqual(pages[0].source_text, "American Classic Arcade Museum Games")
+        self.assertEqual(pages[0].extracted_names, ["Pac-Man", "Galaga"])
+        self.assertEqual(fetched_urls, ["https://www.classicarcademuseum.org/games"])
+
     def test_extract_machine_name_candidates_filters_page_chrome(self):
         names = extract_machine_name_candidates(
             """
@@ -121,6 +190,36 @@ class WebRosterReporterTests(unittest.TestCase):
         )
 
         self.assertEqual(names, ["300", "Bride of Pinbot, The", "Medieval Madness"])
+
+    def test_extract_acam_machine_names_uses_list_and_detail_titles(self):
+        names = extract_acam_machine_names(
+            """
+            Current list of games on the floor!
+            PINBALL!
+            F14 Tomcat
+            Black Knight 2000
+            ACAM Has Some Of The Rarest
+            Games On Earth!
+            Star Trek: Strategic Operations Simulator
+            Manufacturer: Sega • Released: 1983
+            Game Description:
+            A long paragraph about Star Trek.
+            Historical Information:
+            Another long paragraph.
+            Cloak & Dagger
+            Manufacturer: Atari • Released: 1983
+            """
+        )
+
+        self.assertEqual(
+            names,
+            [
+                "F14 Tomcat",
+                "Black Knight 2000",
+                "Star Trek: Strategic Operations Simulator",
+                "Cloak & Dagger",
+            ],
+        )
 
     def test_compare_roster_to_database_reports_matches_and_gaps(self):
         page = RosterPageResult(

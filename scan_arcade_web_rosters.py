@@ -95,6 +95,17 @@ class LinkHint:
     score: int
 
 
+KNOWN_LOCATION_ROSTER_LINKS = {
+    1: (
+        LinkHint(
+            text="American Classic Arcade Museum Games",
+            url="https://www.classicarcademuseum.org/games",
+            score=10,
+        ),
+    ),
+}
+
+
 @dataclass(frozen=True)
 class PageFetchResult:
     ok: bool
@@ -341,6 +352,10 @@ def score_links(links: list[tuple[str, str]], limit: int = 10) -> list[LinkHint]
     return sorted(hints, key=lambda hint: (-hint.score, hint.text.lower()))[:limit]
 
 
+def known_roster_link_hints(location_id: int) -> list[LinkHint]:
+    return list(KNOWN_LOCATION_ROSTER_LINKS.get(location_id, ()))
+
+
 def normalize_game_name(value: str) -> str:
     normalized = html.unescape(value).lower()
     normalized = re.sub(r"\([^)]*\)", " ", normalized)
@@ -453,9 +468,66 @@ def extract_pinside_machine_names(text: str, limit: int = MAX_EXTRACTED_NAMES_PE
     return names
 
 
+def extract_acam_machine_names(text: str, limit: int = MAX_EXTRACTED_NAMES_PER_PAGE) -> list[str]:
+    lines = [normalize_space(line) for line in text.splitlines()]
+    start = None
+    for index, line in enumerate(lines):
+        if line.lower() == "current list of games on the floor!":
+            start = index + 1
+            break
+    if start is None:
+        return []
+
+    names: list[str] = []
+    seen: set[str] = set()
+
+    def add_name(value: str) -> None:
+        candidates = extract_machine_name_candidates(value, limit=1)
+        if not candidates:
+            return
+        candidate = candidates[0]
+        key = normalize_game_name(candidate)
+        if key and key not in seen:
+            seen.add(key)
+            names.append(candidate)
+
+    simple_list_mode = True
+    for index in range(start, len(lines)):
+        line = lines[index]
+        lower = line.lower()
+        if not line:
+            continue
+        if lower in {"pinball!", "game description:", "historical information:"}:
+            continue
+        if lower.startswith("acam has some of the rarest"):
+            simple_list_mode = False
+            continue
+        if lower == "games on earth!":
+            continue
+        if line.startswith("Manufacturer:"):
+            previous = lines[index - 1] if index > start else ""
+            add_name(previous)
+            if len(names) >= limit:
+                break
+            continue
+        if index + 1 < len(lines) and lines[index + 1].startswith("Manufacturer:"):
+            continue
+        if simple_list_mode:
+            add_name(line)
+            if len(names) >= limit:
+                break
+
+    return names[:limit]
+
+
 def extract_machine_names_from_page(url: str, text: str, limit: int = MAX_EXTRACTED_NAMES_PER_PAGE) -> list[str]:
-    if normalized_host(url) == "pinside.com":
+    host = normalized_host(url)
+    if host == "pinside.com":
         names = extract_pinside_machine_names(text, limit=limit)
+        if names:
+            return names
+    if host == "classicarcademuseum.org":
+        names = extract_acam_machine_names(text, limit=limit)
         if names:
             return names
     return extract_machine_name_candidates(text, limit=limit)
@@ -534,15 +606,19 @@ def discover_roster_pages(
     max_pages: int,
     delay_seconds: float,
     allow_trusted_external: bool,
+    extra_hints: list[LinkHint] | None = None,
 ) -> list[RosterPageResult]:
     if not probe.ok:
         return []
     pages: list[RosterPageResult] = []
     seen_urls: set[str] = {probe.final_url.rstrip("/")}
-    for hint in probe.link_hints:
+    explicit_hint_count = len(extra_hints or [])
+    for index, hint in enumerate([*(extra_hints or []), *probe.link_hints]):
+        if index == explicit_hint_count and any(page.ok and page.extracted_names for page in pages):
+            break
         if len(pages) >= max_pages:
             break
-        if not should_follow_roster_url(probe.final_url, hint.url, allow_trusted_external):
+        if index >= explicit_hint_count and not should_follow_roster_url(probe.final_url, hint.url, allow_trusted_external):
             continue
         signature = hint.url.rstrip("/")
         if signature in seen_urls:
@@ -843,6 +919,7 @@ def main() -> int:
                     args.max_roster_pages,
                     args.delay_seconds,
                     not args.no_external_roster_hosts,
+                    known_roster_link_hints(candidate.location_id),
                 )
 
     comparisons: dict[int, RosterComparison] = {}
