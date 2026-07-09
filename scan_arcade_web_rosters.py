@@ -10,6 +10,7 @@ link to a games, machines, collection, or lineup page.
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import html
 import json
@@ -157,6 +158,26 @@ class RosterComparison:
     website_only_names: list[str]
 
 
+@dataclass(frozen=True)
+class ManifestRecord:
+    location_id: int
+    name: str
+    city: str
+    state: str
+    website_url: str
+    game_count: int
+    homepage_ok: bool
+    roster_page_count: int
+    extracted_name_count: int
+    matched_db_game_count: int
+    db_game_count: int
+    match_ratio: float
+    website_only_name_count: int
+    likely_manifest: bool
+    best_roster_url: str
+    best_roster_title: str
+
+
 class PageSummaryParser(HTMLParser):
     def __init__(self, base_url: str) -> None:
         super().__init__(convert_charrefs=True)
@@ -274,14 +295,16 @@ def load_candidates(
     min_game_count: int,
     state: str | None = None,
     location_ids: list[int] | None = None,
+    include_missing_websites: bool = False,
 ) -> list[Candidate]:
     website_expr = "COALESCE(l.website_url, '')" if has_locations_column(conn, "website_url") else "''"
     google_place_expr = "COALESCE(l.google_place_id, '')" if has_locations_column(conn, "google_place_id") else "''"
     source_count_expr = "COALESCE(l.game_count, 0)" if has_locations_column(conn, "game_count") else "0"
     filters = [
         active_atlas_location_clause(),
-        f"{website_expr} <> ''",
     ]
+    if not include_missing_websites:
+        filters.append(f"{website_expr} <> ''")
     params: list[Any] = [*active_atlas_location_params()]
     if state:
         filters.append("upper(COALESCE(l.state, '')) = upper(?)")
@@ -709,6 +732,53 @@ def compare_roster_to_database(db_game_names: list[str], pages: list[RosterPageR
     )
 
 
+def likely_manifest_from_counts(matched_db_game_count: int, db_game_count: int, roster_page_count: int) -> bool:
+    if roster_page_count == 0 or db_game_count == 0:
+        return False
+    match_ratio = matched_db_game_count / db_game_count
+    return matched_db_game_count >= 20 or (matched_db_game_count >= 10 and match_ratio >= 0.50)
+
+
+def build_manifest_records(
+    candidates: list[Candidate],
+    probes: dict[int, ProbeResult],
+    roster_pages: dict[int, list[RosterPageResult]],
+    comparisons: dict[int, RosterComparison],
+) -> list[ManifestRecord]:
+    records: list[ManifestRecord] = []
+    for candidate in candidates:
+        probe = probes.get(candidate.location_id)
+        pages = roster_pages.get(candidate.location_id, [])
+        comparison = comparisons.get(candidate.location_id)
+        ok_pages = [page for page in pages if page.ok]
+        best_page = max(ok_pages, key=lambda page: (len(page.extracted_names), page.roster_score), default=None)
+        extracted_name_count = sum(len(page.extracted_names) for page in ok_pages)
+        matched_db_game_count = len(comparison.matched_db_games) if comparison else 0
+        db_game_count = comparison.db_game_count if comparison else candidate.game_count
+        match_ratio = matched_db_game_count / db_game_count if db_game_count else 0.0
+        records.append(
+            ManifestRecord(
+                location_id=candidate.location_id,
+                name=candidate.name,
+                city=candidate.city,
+                state=candidate.state,
+                website_url=normalize_url(candidate.website_url),
+                game_count=candidate.game_count,
+                homepage_ok=bool(probe and probe.ok),
+                roster_page_count=len(ok_pages),
+                extracted_name_count=extracted_name_count,
+                matched_db_game_count=matched_db_game_count,
+                db_game_count=db_game_count,
+                match_ratio=round(match_ratio, 4),
+                website_only_name_count=len(comparison.website_only_names) if comparison else 0,
+                likely_manifest=likely_manifest_from_counts(matched_db_game_count, db_game_count, len(ok_pages)),
+                best_roster_url=best_page.final_url if best_page else "",
+                best_roster_title=best_page.title if best_page else "",
+            )
+        )
+    return records
+
+
 def markdown_report(
     candidates: list[Candidate],
     probes: dict[int, ProbeResult],
@@ -824,12 +894,14 @@ def write_reports(
     roster_pages: dict[int, list[RosterPageResult]],
     comparisons: dict[int, RosterComparison],
     report_dir: Path,
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path, Path]:
     report_dir.mkdir(parents=True, exist_ok=True)
     generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     md_path = report_dir / f"web_roster_candidates_{stamp}.md"
     json_path = report_dir / f"web_roster_candidates_{stamp}.json"
+    csv_path = report_dir / f"web_roster_manifests_{stamp}.csv"
+    manifest_records = build_manifest_records(candidates, probes, roster_pages, comparisons)
     md_path.write_text(markdown_report(candidates, probes, roster_pages, comparisons, generated_at), encoding="utf-8")
     json_path.write_text(
         json.dumps(
@@ -845,6 +917,7 @@ def write_reports(
                     str(location_id): asdict(comparison)
                     for location_id, comparison in comparisons.items()
                 },
+                "manifest_records": [asdict(record) for record in manifest_records],
             },
             indent=2,
             ensure_ascii=True,
@@ -852,7 +925,12 @@ def write_reports(
         + "\n",
         encoding="utf-8",
     )
-    return md_path, json_path
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(asdict(manifest_records[0]).keys()) if manifest_records else [])
+        if manifest_records:
+            writer.writeheader()
+            writer.writerows(asdict(record) for record in manifest_records)
+    return md_path, json_path, csv_path
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -864,6 +942,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-game-count", type=int, default=DEFAULT_MIN_GAME_COUNT)
     parser.add_argument("--state", help="Limit candidates to a state abbreviation.")
     parser.add_argument("--location-id", type=int, action="append", default=[])
+    parser.add_argument("--include-missing-websites", action="store_true", help="Include candidates with no website URL as unscanned manifest records.")
     parser.add_argument("--probe", action="store_true", help="Fetch each candidate homepage once and score likely roster links.")
     parser.add_argument("--discover-pages", action="store_true", help="Fetch high-scoring internal roster-page links from probed homepages.")
     parser.add_argument("--no-external-roster-hosts", action="store_true", help="Do not follow trusted external roster hosts such as Pinside.")
@@ -885,6 +964,7 @@ def main() -> int:
             min_game_count=args.min_game_count,
             state=args.state,
             location_ids=args.location_id,
+            include_missing_websites=args.include_missing_websites,
         )
         game_names_by_location = (
             load_location_game_names(conn, [candidate.location_id for candidate in candidates])
@@ -903,6 +983,9 @@ def main() -> int:
             if index > 1 and args.delay_seconds > 0:
                 print(f"sleeping {args.delay_seconds:.1f}s before next website request")
                 time.sleep(args.delay_seconds)
+            if not candidate.website_url:
+                print(f"skipping {candidate.location_id}: {candidate.name} has no website URL")
+                continue
             print(f"probing {candidate.location_id}: {candidate.name} -> {candidate.website_url}")
             probes[candidate.location_id] = probe_homepage(
                 candidate,
@@ -930,9 +1013,10 @@ def main() -> int:
                 roster_pages.get(candidate.location_id, []),
             )
 
-    md_path, json_path = write_reports(candidates, probes, roster_pages, comparisons, args.report_dir)
+    md_path, json_path, csv_path = write_reports(candidates, probes, roster_pages, comparisons, args.report_dir)
     print(f"wrote {md_path}")
     print(f"wrote {json_path}")
+    print(f"wrote {csv_path}")
     print(
         f"candidates={len(candidates)} probed={len(probes)} "
         f"roster_page_groups={len(roster_pages)} compared={len(comparisons)}"

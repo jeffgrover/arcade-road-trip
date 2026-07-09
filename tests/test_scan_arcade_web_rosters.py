@@ -7,11 +7,13 @@ from unittest.mock import patch
 import duckdb
 
 from scan_arcade_web_rosters import (
+    Candidate,
     LinkHint,
     PageSummaryParser,
     PageFetchResult,
     ProbeResult,
     RosterPageResult,
+    build_manifest_records,
     compare_roster_to_database,
     extract_acam_machine_names,
     discover_roster_pages,
@@ -19,6 +21,7 @@ from scan_arcade_web_rosters import (
     extract_pinside_machine_names,
     is_internal_url,
     known_roster_link_hints,
+    likely_manifest_from_counts,
     should_follow_roster_url,
     load_candidates,
     load_location_game_names,
@@ -253,6 +256,77 @@ class WebRosterReporterTests(unittest.TestCase):
         self.assertEqual(comparison.roster_page_count, 0)
         self.assertEqual(comparison.missing_db_games, [])
 
+    def test_likely_manifest_from_counts_requires_roster_page_and_enough_matches(self):
+        self.assertFalse(likely_manifest_from_counts(30, 80, 0))
+        self.assertFalse(likely_manifest_from_counts(9, 12, 1))
+        self.assertTrue(likely_manifest_from_counts(20, 80, 1))
+        self.assertTrue(likely_manifest_from_counts(10, 12, 1))
+
+    def test_build_manifest_records_summarizes_best_roster_page(self):
+        candidate = Candidate(
+            location_id=1,
+            name="Example Arcade",
+            city="Orlando",
+            state="FL",
+            website_url="example.test",
+            game_count=40,
+            source_game_count=40,
+            status="active",
+            google_place_id="",
+        )
+        probe = ProbeResult(
+            ok=True,
+            final_url="https://example.test",
+            status_code=200,
+            content_type="text/html",
+            title="Example",
+            roster_score=5,
+            link_hints=[],
+            cache_path="/tmp/home.html",
+            error="",
+        )
+        pages = [
+            RosterPageResult(
+                source_text="Small",
+                source_url="https://example.test/small",
+                source_score=1,
+                ok=True,
+                final_url="https://example.test/small",
+                status_code=200,
+                content_type="text/html",
+                title="Small",
+                roster_score=1,
+                extracted_names=["Galaga"],
+                cache_path="/tmp/small.html",
+                error="",
+            ),
+            RosterPageResult(
+                source_text="Games",
+                source_url="https://example.test/games",
+                source_score=4,
+                ok=True,
+                final_url="https://example.test/games",
+                status_code=200,
+                content_type="text/html",
+                title="Games",
+                roster_score=8,
+                extracted_names=["Galaga", "Pac-Man"],
+                cache_path="/tmp/games.html",
+                error="",
+            ),
+        ]
+        comparison = compare_roster_to_database(["Galaga", "Pac-Man"], pages)
+
+        records = build_manifest_records([candidate], {1: probe}, {1: pages}, {1: comparison})
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].website_url, "https://example.test")
+        self.assertEqual(records[0].roster_page_count, 2)
+        self.assertEqual(records[0].extracted_name_count, 3)
+        self.assertEqual(records[0].matched_db_game_count, 2)
+        self.assertEqual(records[0].match_ratio, 1.0)
+        self.assertEqual(records[0].best_roster_url, "https://example.test/games")
+
     def test_load_candidates_prefers_large_active_locations_with_websites(self):
         conn = duckdb.connect(":memory:")
         try:
@@ -307,6 +381,15 @@ class WebRosterReporterTests(unittest.TestCase):
             self.assertEqual([candidate.location_id for candidate in candidates], [1])
             self.assertEqual(candidates[0].website_url, "big.example")
             self.assertEqual(candidates[0].google_place_id, "PlaceBig")
+
+            candidates_with_missing_websites = load_candidates(
+                conn,
+                limit=10,
+                min_game_count=2,
+                include_missing_websites=True,
+            )
+
+            self.assertEqual([candidate.location_id for candidate in candidates_with_missing_websites], [4, 1])
         finally:
             conn.close()
 

@@ -1,0 +1,501 @@
+location_id,name,city,state,website_url,game_count,homepage_ok,roster_page_count,extracted_name_count,matched_db_game_count,db_game_count,match_ratio,website_only_name_count,likely_manifest,best_roster_url,best_roster_title
+638,Galloping Ghost Arcade,Brookfield,IL,https://gallopingghostarcade.com,1229,True,2,1125,1175,1229,0.9561,59,True,https://www.gallopingghostarcade.com/games-list/,Games List | Galloping Ghost Arcade
+7261,Past Times Arcade,Girard,OH,https://pasttimesarcade.com,1082,True,1,417,487,833,0.5846,25,True,https://pinside.com/pinball/map/where-to-play/17578-past-times-arcade-girard-oh,"Pinball Map » Past Times Arcade, Girard, OH | Pinside Map"
+1301,Game Galaxy @ Smyrna,Smyrna,TN,https://gamegalaxyarcade.com,735,False,0,0,0,646,0.0,0,False,,
+1986,Pinball PA,Aliquippa,PA,http://j.mp/3c7kS2A,615,False,0,0,0,565,0.0,0,False,,
+7237,Next Level Pinball Shop & Museum,Hillsboro,OR,https://nextlevelpinballmuseum.com,586,True,3,632,516,569,0.9069,108,True,https://www.nextlevelpinballmuseum.com/museum-collection-all,Game List by title (all) | Next Level Pinball Museum
+1,Funspot - also includes ACAM,Laconia,NH,https://funspotnh.com,553,True,1,30,33,523,0.0631,2,True,https://www.classicarcademuseum.org/games,Arcade Games at the American Classic Arcade Museum in New Hampshire
+103,Pinball Hall of Fame,Las Vegas,NV,https://pinballmuseum.org,474,True,1,1368,261,465,0.5613,385,True,https://pinballmuseum.org/games/games.php,Game List for Las Vegas Pinball Hall of Fame (PHoF)
+455,Pinball Perfection Museum and Players Club,Pittsburgh,PA,https://pinballperfection.com,422,False,0,0,0,422,0.0,0,False,,
+8419,Push Start Play Family Entertainment Center,Lewisville,TX,https://pushstartplay.com/?utm_source=google&utm_medium=gbp&utm_campaign=gbp_optimization,387,True,1,25,0,385,0.0,25,False,https://pushstartplay.com/arcade-games/,Arcade Games - Push Start Play
+5114,Pinball Palace,Brunswick,GA,https://thepinballpalace.com,375,True,3,128,123,282,0.4362,29,True,https://thepinballpalace.com/pinball-games,PINBALL GAMES
+824,Pinball Wizard Arcade (closed),Pelham,NH,https://myarcaderepair.com,349,True,0,0,0,347,0.0,0,False,,
+6167,Game Terminal Super Arcade and Bar,Nashville,TN,https://gameterminal.com,343,True,1,241,245,325,0.7538,51,True,https://gameterminal.com/games/,Games | Game Terminal
+810,Pinballz Arcade,Austin,TX,https://pinballz.com/events/pinballz-monday-league-season-2/,326,True,3,1119,217,310,0.7,465,True,https://pinballz.com/lake-creek/lake-creek-modern-games/,Modern Games | Pinballz Lake Creek
+8278,Cidercade @ Arlington,Arlington,TX,https://tripleseat.com,311,True,0,0,0,309,0.0,0,False,,
+7246,Cidercade @ Houston,Houston,TX,https://tripleseat.com,251,True,0,0,0,250,0.0,0,False,,
+-2000003831,Round1 Bowling & Arcade (Exton Square Mall),Exton,PA,https://round1usa.com,231,True,0,0,0,231,0.0,0,False,,
+-2000004987,Round1 Bowling & Arcade (Potomac Mills),Woodbridge,VA,https://round1usa.com,230,True,0,0,0,230,0.0,0,False,,
+8292,Timeline Arcade @ York,York,PA,https://timelinearcade.com,230,False,0,0,0,228,0.0,0,False,,
+8340,Electromagnetic Pinball Museum & Restoration,Pawtucket,RI,https://electromagneticpinballmuseum.com,225,True,1,128,103,207,0.4976,37,True,https://www.electromagneticpinballmuseum.com/about-us,Games List | Electromagnetic Pinball Museum and Restoration
+5110,Flashback Arcade,Murfreesboro,TN,https://facebook.com,221,False,0,0,0,218,0.0,0,False,,
+1887,"Game Preserve, The",Spring,TX,https://gamepreservehouston.com,221,True,1,226,143,217,0.659,89,True,https://gamepreservehouston.com/the-games,The Games List
+-2000004787,Round1 Bowling & Arcade (Fashion District Philadelphia),Philadelphia,PA,https://round1usa.com,220,True,0,0,0,220,0.0,0,False,,
+-2000004363,Round1 Bowling & Arcade (Towson Town Center),Towson,MD,https://round1usa.com,218,True,0,0,0,218,0.0,0,False,,
+1397,Underground Retrocade,West Dundee,IL,https://undergroundretrocade.com,215,True,2,40,2,215,0.0093,18,False,https://undergroundretrocade.com/games,Games
+1021,Round One: Puente Hills Mall,City of Industry,CA,https://round1usa.com,212,True,0,0,0,211,0.0,0,False,,
+1987,StarFighters Arcade,Mesa,AZ,https://starfightersarcade.com,211,True,0,0,0,207,0.0,0,False,,
+1422,Pinball Gallery,Malvern,PA,https://pinballgallery.net,209,True,1,340,127,174,0.7299,205,True,https://pinballgallery.net/game-list/,Pinball Gallery: Malvern's Classic Pinball Arcade and Retail Store - Game List
+3075,Garcade,Menomonee Falls,WI,https://thegarcade.com,206,True,0,0,0,204,0.0,0,False,,
+8307,Cidercade @ Dallas,Dallas,TX,https://tripleseat.com,205,True,0,0,0,203,0.0,0,False,,
+-2000004871,Round1 Bowling & Arcade (Deptford Mall),Deptford,NJ,https://round1usa.com,204,True,0,0,0,204,0.0,0,False,,
+8394,Arcade Time @ Orlando,Orlando,FL,https://arcadetimeusa.com,199,True,0,0,0,197,0.0,0,False,,
+8277,Arcade Monsters,Orlando,FL,https://arcademonsters.com,194,True,0,0,0,192,0.0,0,False,,
+332,Atomic Pinball Arcade,Wood River,IL,https://atomicpinballarcade.com,189,True,0,0,0,185,0.0,0,False,,
+1134,Timeline Arcade,Hanover,PA,https://timelinearcade.com,188,False,0,0,0,182,0.0,0,False,,
+4089,Morristown Game Vault,Morristown,NJ,https://morristowngamevault.com,187,True,0,0,0,179,0.0,0,False,,
+8330,Round1: Holyoke,Holyoke,MA,https://round1usa.com,184,True,0,0,0,184,0.0,0,False,,
+314,Funworld,Nashua,NH,https://funworldnh.com,183,True,1,31,19,183,0.1038,15,False,https://funworldnh.com/games.html,"FunWorld Games Nashua, NH"
+8351,Round One: Broadway Common,Hicksville,NY,https://round1usa.com,183,True,0,0,0,183,0.0,0,False,,
+35,Ground Kontrol Classic Arcade,Portland,OR,https://maps.m.en.gpjzdhrladu.es,182,False,0,0,0,181,0.0,0,False,,
+-2000003934,Round1 Bowling & Arcade (Galleria at Crystal Run),Middletown,NY,https://round1usa.com,182,True,0,0,0,182,0.0,0,False,,
+6179,The Game Preserve NASA,Webster,TX,https://gamepreservehouston.com,180,True,1,226,123,171,0.7193,102,True,https://gamepreservehouston.com/the-games,The Games List
+8409,Arcade Monsters,San Diego,CA,https://arcademonsters.com,178,True,0,0,0,176,0.0,0,False,,
+-2000007390,Game Gallery,Langhorne,PA,https://gamegallerylanghorne.com,176,True,2,51,0,176,0.0,40,False,https://gamegallerylanghorne.com/retail,Retail
+-2000007905,Round1 Bowling & Arcade  (Westfield Plaza Bonita),National City,CA,https://round1usa.com,171,True,0,0,0,171,0.0,0,False,,
+2023,Silverball Pinball Arcade,Asbury Park,NJ,https://silverballmuseum.com,171,True,0,0,0,171,0.0,0,False,,
+-2000004985,Round1 Bowling & Arcade (Park City Center),Lancaster,PA,https://round1usa.com,166,True,0,0,0,166,0.0,0,False,,
+7201,Starcade,Roseville,MN,https://maps.m.en.gpjzdhrladu.es,162,False,0,0,0,162,0.0,0,False,,
+-1000009351,Wizard's World,Fort Wayne,IN,https://maps.m.en.gpjzdhrladu.es,160,False,0,0,0,160,0.0,0,False,,
+2001,Geeks Mania,Madison,WI,https://geeksmania.com,158,True,1,15,0,154,0.0,15,False,https://www.geeksmania.com/items,Items (List) | Geeksmania
+82,Half Moon Arcade,Weirs Beach,NH,https://weirsbeach.com,157,True,1,180,2,157,0.0127,178,False,https://weirsbeach.com/aerial-photo-collection/,Weirs Beach Aerial Photos Collection | WEIRS BEACH - WHERE LAKE WINNIPESAUKEE BEGINS
+-2000007955,Round1 Bowling & Arcade (Danbury Fair),Danbury,CT,https://round1usa.com,157,True,0,0,0,157,0.0,0,False,,
+1215,YESTERcades,Red Bank,NJ,https://yestercades.com,156,True,1,120,81,152,0.5329,54,True,https://yestercades.com/somerville/,YESTERcades of Somerville – YESTERcades YESTERcades of Somerville – YESTERcades
+-2000004172,Time Loop Arcade,Kingwood,TX,https://kingwoodarena.com,155,False,0,0,0,155,0.0,0,False,,
+421,Joe's Playland,Salisbury Beach,MA,https://joesplayland.com,154,True,1,8,0,150,0.0,8,False,https://joesplayland.com/about-us--our-games.html,About Us / Our Games - Welcome
+-2000004979,Round1 Bowling & Arcade (Cumberland Mall),Atlanta,GA,https://round1usa.com,152,True,0,0,0,152,0.0,0,False,,
+7212,Wayback's Arcade,Pineville,LA,https://waybacksarcade.com,152,True,1,191,123,152,0.8092,71,True,https://waybacksarcade.com/games-list/,Games List – Wayback's Arcade
+1223,Arcade Odyssey,Miami,FL,https://arcadeodyssey.com,151,True,1,221,87,151,0.5762,129,True,https://arcadeodyssey.com/gamesinthearcade.php,Arcade Games in Miami | Arcade Odyssey
+809,Dave & Busters,Islandia,NY,https://www.daveandbusters.com/us/en/watch/soccer,151,True,0,0,0,151,0.0,0,False,,
+230,Pinball Pete's,Ann Arbor,MI,https://www.pinballpetes.org/,151,True,2,42,0,151,0.0,27,False,https://www.pinballpetes.org/east-lansing-location-games,"Arcade Games & Entertainment | Pinball Pete's | Ann Arbor & East Lansing, MI"
+1664,8-Bit Arcade,Renton,WA,http://www.facebook.com/pages/8-bit-Arcade-Bar/434005613350903,150,False,0,0,0,148,0.0,0,False,,
+8284,Game Gallery,Easton,PA,https://gamegallerypa.com,150,False,0,0,0,150,0.0,0,False,,
+-2000009520,Round1 Bowling & Arcade (Menlo Park Mall),Edison,NJ,https://round1usa.com,150,True,0,0,0,150,0.0,0,False,,
+1630,"Arcade, The",Brighton,MI,https://www.facebook.com/thearcadebrighton,149,False,0,0,0,149,0.0,0,False,,
+3062,Free Play Richardson,Richardson,TX,https://freeplayrichardson.com,149,True,1,10,1,148,0.0068,8,False,https://freeplayinc.com/richardson/games/,The Free Play Richardson Game List!
+362,Dave & Busters,Westlake,OH,https://www.daveandbusters.com/us/en/watch/soccer,148,True,0,0,0,148,0.0,0,False,,
+-2000007904,Round1 Bowling & Arcade (Arrowhead Towne Center),Glendale,AZ,https://round1usa.com,148,True,0,0,0,148,0.0,0,False,,
+769,Dorky's Bar Arcade,Tacoma,WA,https://dorkysarcade.com,146,True,0,0,0,144,0.0,0,False,,
+-2000005861,Lucky Snake Arcade and Sports Bar,Atlantic City,NJ,https://theluckysnake.com,146,True,0,0,0,146,0.0,0,False,,
+-2000002633,Arcade Legacy,Sharonville,OH,https://arcadelegacyohio.com,145,True,1,157,99,145,0.6828,56,True,https://arcadelegacyohio.com/115-2/,Game List - Arcade Legacy
+960,Crabtowne USA,Glen Burnie,MD,https://crab-towne.com,145,True,1,112,99,139,0.7122,29,True,https://www.crab-towne.com/?page_id=26,Arcade Games / Pinball Machines – Crabtowne
+932,Pacific Pinball Museum,Alameda,CA,http://www.pacificpinball.org/home,145,True,3,102,0,141,0.0,40,False,https://www.pacificpinball.org/games,Games For Sale | Pacific Pinball Museum
+1874,The 1up – Colfax,Denver,CO,http://www.the-1up.com/colfax/,145,False,0,0,0,144,0.0,0,False,,
+-2000004493,Billy's Midway Arcade,Hawthorne,NJ,https://billysmidway.com,143,True,1,118,103,143,0.7203,19,True,https://billysmidway.com/games.html,Games - BILLY'S MIDWAY
+8433,Decades Arcade,Charlottesville,VA,https://decadesarcade.com,142,True,3,317,115,142,0.8099,159,True,https://www.decadesarcade.com/arcade-games/,Arcade Games | Decades Arcade
+1194,Robot City Arcade,Binghamton,NY,https://robotcitygames.com,142,True,1,154,116,142,0.8169,42,True,https://robotcitygames.com/gamelist.html,Robot City Games and Arcade 126 Clinton St Binghamton NY 13905
+547,Rock Fantasy,Middletown,NY,http://www.rockfantasy.com/wp/,142,True,0,0,0,118,0.0,0,False,,
+179,Nickel! Nickel! 5c Games,Garden Grove,CA,https://nickelnickelhb.com,141,False,0,0,0,138,0.0,0,False,,
+1932,YESTERcades Somerville,Somerville,NJ,http://yestercades.com/,141,True,1,120,113,132,0.8561,22,True,https://yestercades.com/somerville/,YESTERcades of Somerville – YESTERcades YESTERcades of Somerville – YESTERcades
+695,Nickel Mania,West Jordan,UT,https://nickelmaniaarcade.com,139,True,0,0,0,139,0.0,0,False,,
+-2000004477,YESTERcades (Westfield),Westfield,NJ,https://yestercades.com,139,True,1,120,61,139,0.4388,68,True,https://yestercades.com/somerville/,YESTERcades of Somerville – YESTERcades YESTERcades of Somerville – YESTERcades
+700,Nickel Mania,Murray,UT,https://nickelmaniaarcade.com,138,True,0,0,0,137,0.0,0,False,,
+532,Jilly's Arcade,Ocean City,NJ,http://www.jillysarcade.com/,137,True,0,0,0,132,0.0,0,False,,
+-2000008278,Marcade (Rockaway Townsquare),Rockaway,NJ,https://maps.m.en.gpjzdhrladu.es,137,False,0,0,0,136,0.0,0,False,,
+7243,Pastime Pinball,Manchester Center,VT,https://pastimepinball.com/,137,True,3,152,75,98,0.7653,70,True,https://pastimepinball.com/our-games/,Pinball Museum Playable Games Vermont — Pastime Pinball
+898,Silver Ball Museum Arcade,Asbury Park,NJ,http://silverballmuseum.com,137,True,0,0,0,137,0.0,0,False,,
+8267,Vintage Vault Arcade,Mukwonago,WI,https://www.facebook.com/VintageVaultArcade/,136,False,0,0,0,136,0.0,0,False,,
+8405,Aftershock Classic Arcade Bar,Madison,WI,https://aftershockclassicarcade.com,135,True,0,0,0,135,0.0,0,False,,
+-2000007271,Leaderboard 2 Arcade Bar & Pizzeria (Shad),Jacksonville,FL,https://leaderboardarcade.com,135,True,1,206,33,134,0.2463,170,True,https://leaderboardarcade.com/wells-road-location/games/,Wells Road Games - Leaderboard Arcade
+6142,Free Play Arlington,Arlington,TX,https://freeplaymerch.com,134,True,0,0,0,134,0.0,0,False,,
+-1000028748,The Pinball Capital,Stone Park,IL,https://pinballcapital.com,134,False,0,0,0,133,0.0,0,False,,
+6144,Free Play Denton,Denton,TX,http://freeplaydenton.com,132,True,1,10,0,132,0.0,10,False,https://freeplayinc.com/denton/games/,The Games at Free Play Denton!
+8385,Starcade @ Atlantic City,Mays Landing,NJ,https://starcade-ac.com,132,True,1,112,111,130,0.8538,17,True,https://starcade-ac.com/game-list,Arcade - Starcade - Retro Gaming and Pinball
+2029,Roanoke Pinball Museum,Roanoke,VA,https://roanokepinball.org,131,True,1,84,69,131,0.5267,18,True,https://roanokepinball.org/our-machines,OUR MACHINES
+-2000003295,Round1 Bowling & Arcade (Main Place Mall),Santa Ana,CA,https://round1usa.com,131,True,0,0,0,131,0.0,0,False,,
+-2000004340,Dave & Buster's (Baltimore / White Marsh),Baltimore,MD,https://www.daveandbusters.com/us/en/watch/soccer,130,True,0,0,0,130,0.0,0,False,,
+8311,Retrovolt Arcade,Calimesa,CA,https://retrovoltarcade.com/,130,True,3,69,4,130,0.0308,22,False,https://Retrovoltarcade.com/games/#arcade,Arcade Games & Pinball on Free Play in the Inland Empire
+-2000006807,GameCraft Arcade & Bar,Southington,CT,https://gamecraft-arcade.com,128,True,1,136,112,128,0.875,26,True,https://www.gamecraft-arcade.com/arcades-pinballs,Arcades & Pinballs — GameCraft Arcade and Bar
+4,Flipper McCoy's,Virginia Beach,VA,https://flippermccoys.com,127,True,1,10,0,127,0.0,10,False,https://flippermccoys.com/games-attractions/,Games & Attractions | Flipper McCoys
+8268,Hooligans Arcade @ Alabaster,Alabaster,AL,https://hooligansfamilyfun.com/,127,True,0,0,0,125,0.0,0,False,,
+5101,The Arcade,Wichita,KS,https://www.thearcadewichita.com/,127,True,1,143,97,126,0.7698,46,True,https://thearcadewichita.com/our-games/,Our Games - The Arcade
+570,Arcadia: America's Playable Arcade Museum,McLean,IL,http://vintagevideogames.com/,124,True,1,61,19,124,0.1532,43,False,https://www.vintagevideogames.com/pinball-paradise,PINBALL PARADISE | arcadia
+1132,Intl. Center for the History of Electronic Games,Rochester,NY,http://www.icheg.org/collections/arcade,122,False,0,0,0,122,0.0,0,False,,
+-2000010896,The Church Arcade,Duquesne,PA,https://www.thechurcharcade.com/,122,True,1,146,88,122,0.7213,57,True,https://www.thechurcharcade.com/games,Our Games | Church Arcade
+-1000008368,Pocketeer Billiards and Bar,Buffalo,NY,http://pocketeerbilliardsandbar.com/,121,True,1,118,83,121,0.686,38,True,https://www.pocketeerbilliardsandbar.com/pinball,Buffalo's Largest Pinball Arcade | Pocketeer Billiards
+-2000004963,Recbar,Jeffersontown,KY,https://www.recbarlouisville.com,121,True,1,138,73,121,0.6033,65,True,https://www.recbarlouisville.com/games.html,Games - RECBAR - LOUISVILLE'S LARGEST ARCADE BAR!
+-2000003296,Round1 Bowling & Arcade (Westfield Southcenter),Tukwila,WA,https://round1usa.com,121,True,0,0,0,121,0.0,0,False,,
+1888,Up-Down,Des Moines,IA,http://updowndsm.com/,121,True,3,198,0,121,0.0,66,False,https://updownarcadebar.com/des-moines/#tab_6a4eff2305d5f,Des Moines – Up-Down Arcade Bar
+887,Cactus Jack's Arcade,Oklahoma City,OK,https://www.facebook.com/CactusJacksFamilyFunCenter/?fref=ts,120,False,0,0,0,120,0.0,0,False,,
+789,Manitou Penny Arcade,Manitou Springs,CO,http://www.manitouspringspennyarcade.com,120,False,0,0,0,118,0.0,0,False,,
+-2000004559,Dave & Buster's (Staten Island),Staten Island,NY,https://www.daveandbusters.com/locations/staten-island,119,True,0,0,0,119,0.0,0,False,,
+2009,Boss Battle Games,Indianapolis,IN,http://bossbattlegames.weebly.com/,117,False,0,0,0,117,0.0,0,False,,
+1373,Chuck E. Cheese's,Paramus,NJ,,117,False,0,0,0,117,0.0,0,False,,
+-2000004138,Enterrium,Schaumburg,IL,https://enterrium.info,117,True,0,0,0,117,0.0,0,False,,
+211,GameWorks,Seattle,WA,http://www.gameworks.com,115,True,0,0,0,115,0.0,0,False,,
+735,High Scores Interactive Arcade Museum,Alameda,CA,http://www.highscoresarcade.blogspot.com,115,True,2,198,55,115,0.4783,55,True,http://highscoresarcade.blogspot.com/2012/03/weve-only-added-games-since-then.html,High Scores Interactive Arcade Museum: We've Only Added Games Since Then!
+7217,Marcade Family Fun Center,Dover,NJ,https://marcade.us/,115,True,1,101,27,115,0.2348,73,True,https://marcade.us/games,Marcade Family Fun Center
+1762,Tilt @ Southland Mall,Hayward,CA,http://www.tilt.com/,115,True,0,0,0,115,0.0,0,False,,
+6137,Arcade Monsters,Oviedo,FL,http://arcademonsters.com,114,True,0,0,0,114,0.0,0,False,,
+-2000010099,Dave & Buster's (Freehold),Freehold,NJ,https://www.daveandbusters.com/us/en/about/locations/freehold,114,True,0,0,0,114,0.0,0,False,,
+1564,Arkadia Retrocade,Fayetteville,AR,https://www.facebook.com/pages/Arkadia-Retrocade/293619130743490,113,False,0,0,0,113,0.0,0,False,,
+-2000007290,Dave & Buster's (Gloucester),Blackwood,NJ,https://www.daveandbusters.com/us/en/about/locations/gloucester,113,True,0,0,0,113,0.0,0,False,,
+-1000025213,Sparks Pinball Museum & Arcade,Troy,MI,https://sparksarcade.com/,113,True,3,218,69,113,0.6106,116,True,https://sparkspinballmuseum.com/archives-of-games,Archives of Games
+8435,Tilted 10,Willow Grove,PA,http://www.tilted10.com/,113,True,0,0,0,112,0.0,0,False,,
+-2000009193,Fun -N- Games Rewind,Boardman,OH,https://www.instagram.com/funngamesrewind/,112,True,0,0,0,112,0.0,0,False,,
+-1000010406,District 82 Pinball,De Pere,WI,https://district82.com,111,True,3,747,102,111,0.9189,439,True,https://district82.com/event/summer-pinball-classic-2026/,2026 Summer Pinball Classic – Stern Pro Circuit Event
+-1000022610,The PinLodge,Indianapolis,IN,https://www.facebook.com/groups/indypinball/,111,False,0,0,0,111,0.0,0,False,,
+120,Arcade Galactic,West Valley City,UT,http://gamegridarcade.com/,110,True,0,0,0,110,0.0,0,False,,
+970,Arcadia: Space Needle,Gatlinburg,TN,http://www.gatlinburgarcade.com/,110,True,0,0,0,110,0.0,0,False,,
+-2000003455,Dave & Buster's (Pelham Manor),Pelham Manor,NY,https://www.daveandbusters.com/us/en/about/locations/pelham-manor,110,True,0,0,0,110,0.0,0,False,,
+-2000004347,Dave & Buster's (Wayne),Wayne,NJ,https://www.daveandbusters.com/us/en/about/locations/wayne,110,True,0,0,0,110,0.0,0,False,,
+-2000007162,Free Play Arcade - Dallas,Dallas,TX,https://freeplayinc.com/,110,True,0,0,0,110,0.0,0,False,,
+6125,Quarter Up,Akron,OH,https://www.facebook.com/QuarterUpBar/,110,False,0,0,0,108,0.0,0,False,,
+-2000010453,Radioactive Pinball Arcade,Aiken,SC,https://radioactivepinballarcade.com/,110,True,3,122,25,109,0.2294,58,True,https://radioactivepinballarcade.com/video-games,"Radioactive Pinball Arcade in Aiken, South Carolina"
+-2000006535,Roanoke STARCADE,Roanoke,VA,http://roanokestarcade.org/,110,True,3,151,75,110,0.6818,46,True,https://roanokestarcade.org/arcade-cabinets,Arcade Cabinets
+1146,Seattle Pinball Museum,Seattle,WA,http://www.facebook.com/pages/Seattle-Pinball-Museum/131237786915560?sk=info,110,False,0,0,0,94,0.0,0,False,,
+-2000008500,Tycoon Arcade,Manchester,NH,https://www.pinballtycoon.com/arcade,110,True,3,228,15,110,0.1364,148,False,https://www.pinballtycoon.com/browse,Browse Pinball Machines & Arcade Accessories | Pinball Tycoon
+-2000002798,Dave & Buster's (Crossgates Mall),Albany,NY,https://www.daveandbusters.com/us/en/about/locations/albany,109,True,0,0,0,109,0.0,0,False,,
+-2000004258,Dave & Buster's (Woodbridge Center),Woodbridge Township,NJ,https://www.daveandbusters.com/us/en/about/locations/woodbridge-middlesex,109,True,0,0,0,109,0.0,0,False,,
+8349,Hometown Arcade @ Norwood,Norwood,MA,https://norwood.hometownarcade.com/,109,True,3,310,76,107,0.7103,220,True,https://norwood.hometownarcade.com/games,Hometown Arcade - Good Times | Great Games | Free Play
+2012,Pixel Blast Arcade,Lisle,IL,https://www.facebook.com/pixelblastarcade,109,False,0,0,0,109,0.0,0,False,,
+-2000003677,Scene75 Entertainment Center | Cincinnati,Milford,OH,https://scene75.com/cincinnati/,109,True,0,0,0,109,0.0,0,False,,
+8304,Time Rift Arcade,Bedford,TX,https://timeriftarcade.com/games/,109,True,1,30,1,108,0.0093,29,False,https://timeriftarcade.com/games/#content,GAMES AT THE TIME RIFT - Time Rift Arcade
+845,Castles n Coasters,Phoenix,AZ,http://www.castlesncoasters.com/index.html,108,False,0,0,0,108,0.0,0,False,,
+-2000003412,Dave & Buster's (Philadelphia Waterfront),Philadelphia,PA,https://www.daveandbusters.com/us/en/about/locations/philadelphia,108,True,0,0,0,108,0.0,0,False,,
+-2000008401,Round1 Bowling & Arcade (The Mills at Jersey Gardens),Elizabeth,NJ,https://www.round1usa.com/the-mills-at-jersey-garden,108,True,1,62,1,108,0.0093,62,False,https://www.round1usa.com/activities-list/arcade-games,Round1 Bowling and Arcade | Round1 USA | Arcade near you | Claw Machine | Japanese Arcade Games | Round1 USA
+-2000006267,Arcade Monsters (Melbourne),Melbourne,FL,https://www.arcademonsters.com/,107,True,0,0,0,107,0.0,0,False,,
+8348,Barcade @ FIDI,New York,NY,https://barcade.com/fidi/,107,False,0,0,0,106,0.0,0,False,,
+-2000005045,Scene75 Entertainment Center | Cleveland,Brunswick,OH,https://scene75.com/cleveland/,106,True,0,0,0,106,0.0,0,False,,
+-2000007683,YESTERcades (Metuchen),Metuchen,NJ,https://yestercades.com/?page_id=669,106,False,0,0,0,106,0.0,0,False,,
+-2000000319,Dave & Buster's (Arundel Mills),Hanover,MD,https://www.daveandbusters.com/us/en/about/locations/hanover-arundel-mills,105,True,0,0,0,105,0.0,0,False,,
+-2000003643,Dave & Buster's (Sevierville),Sevierville,TN,https://www.daveandbusters.com/us/en/about/locations/sevierville,105,True,0,0,0,105,0.0,0,False,,
+8318,Family Fun Center,York,PA,,105,False,0,0,0,105,0.0,0,False,,
+-2000002835,MBM Fun Center Arcade (Ocean Beach Park),New London,CT,http://www.obpamusements.com,105,True,0,0,0,105,0.0,0,False,,
+1313,Treehouse Arcade,Mashantucket,CT,http://www.foxwoods.com/arcade.aspx,105,False,0,0,0,105,0.0,0,False,,
+584,Challenge Arcade,Wyomissing,PA,http://www.ChallengeArcade.com,104,True,0,0,0,104,0.0,0,False,,
+-2000003746,Dave & Buster's (Springfield),Springfield,VA,https://www.daveandbusters.com/us/en/about/locations/springfield,104,True,0,0,0,104,0.0,0,False,,
+-1000016364,Idaho Pinball Museum,Boise,ID,https://idahopinballmuseum.com/,102,True,0,0,0,102,0.0,0,False,,
+8428,K1 Speed,Mt. Kisco,NY,https://www.k1speed.com/mount-kisco-location.html,102,True,0,0,0,102,0.0,0,False,,
+8366,Seven Ranges Entertainment,Steubenville,OH,https://7rangesentertainment.com/arcade/,102,True,1,16,0,102,0.0,16,False,https://7rangesentertainment.com/games/,Games – 7 Ranges Entertainment
+8441,Arcade Monsters,Murrieta,CA,http://arcademonsters.com/,101,True,0,0,0,95,0.0,0,False,,
+-2000009561,Game On Retro Arcade (Riverhead),Riverhead,NY,https://gameonmp.com/arcade/,101,True,0,0,0,101,0.0,0,False,,
+-1000026454,Austin Pinball Collective,Austin,TX,https://austinpinballcollective.org/,100,True,0,0,0,100,0.0,0,False,,
+7225,Back to the Arcade,Allentown,PA,http://www.AllentownArcade.com,100,True,2,7,0,97,0.0,4,False,https://www.allentownarcade.com/flat-rate-arcade-play/,Play Arcade Games – Back To the Arcade: 1980's Arcade Experience in Allentown's South Mall
+-2000001370,Dave & Buster's (Palisades Center),West Nyack,NY,https://www.daveandbusters.com/locations/west-nyack,100,True,0,0,0,100,0.0,0,False,,
+-2000004978,Round1 Bowling & Arcade (Pembroke Lakes Mall),Pembroke Pines,FL,https://www.round1usa.com/,100,True,0,0,0,100,0.0,0,False,,
+28,Barcade Brooklyn,Brooklyn,NY,http://www.barcadebrooklyn.com,99,True,1,20,0,94,0.0,20,False,https://barcade.com/games,Games - Barcade® - The Original Arcade Bar
+-2000001373,Dave & Buster's (Franklin Mall),Philadelphia,PA,https://www.daveandbusters.com/us/en/about/locations/philadelphia-franklin-mills,99,True,0,0,0,99,0.0,0,False,,
+-2000007519,Overlook Arcade (Hersheypark),Hershey,PA,https://www.hersheypark.com/,98,True,1,92,0,97,0.0,92,False,https://www.hersheypark.com/things-to-do/games,Amusement Park Games | Hersheypark
+-2000007140,Supercharged Entertainment New Jersey,Edison,NJ,https://www.superchargede.com/edison/,98,False,0,0,0,98,0.0,0,False,,
+-1000021461,Tycoon Arcade,Manchester,NH,https://www.TycoonArcade.com,98,True,3,228,14,98,0.1429,143,False,https://www.pinballtycoon.com/browse,Browse Pinball Machines & Arcade Accessories | Pinball Tycoon
+322,8 On The Break,Dunellen,NJ,http://www.thebreak.net,97,True,2,9,1,95,0.0105,6,False,http://www.thebreak.net/arcade.html,The Break Arcade
+-2000006571,Dave & Buster's (Alderwood),Lynnwood,WA,https://www.daveandbusters.com/us/en/about/locations/lynnwood,97,True,0,0,0,97,0.0,0,False,,
+1147,Nickel-A-Play,Aurora,CO,https://www.facebook.com/pages/Nickel-A-Play/141914669165622,97,False,0,0,0,97,0.0,0,False,,
+1974,"Pinball Lounge, The",Oviedo,FL,http://www.thepinballlounge.com/,97,True,2,65,52,92,0.5652,20,True,http://www.thepinballlounge.com/pb/wp_252cefb4/wp_252cefb4.html,ThePinballLounge.com - Current Games
+-2000003958,Dave & Buster's (Corbin Park),Overland Park,KS,https://www.daveandbusters.com/us/en/watch/soccer,96,True,0,0,0,96,0.0,0,False,,
+2038,Lyons Classic Pinball,Lyons,CO,http://www.lyonspinball.com/intro.htm,96,True,0,0,0,96,0.0,0,False,,
+-2000006270,Dave & Buster's (Atlantic Center),Brooklyn,NY,https://www.daveandbusters.com/us/en/about/locations/brooklyn-atlantic-station,95,True,0,0,0,95,0.0,0,False,,
+554,Dave & Busters,New York,NY,http://www.daveandbusters.com/locations/default.aspx,95,True,0,0,0,95,0.0,0,False,,
+1636,"Funplex, The",East Hanover,NJ,http://funplexeasthanover.com/,95,False,0,0,0,95,0.0,0,False,,
+-2000005496,Main Event (Newark),New Castle,DE,https://www.mainevent.com/locations/delaware/newark/,95,True,0,0,0,95,0.0,0,False,,
+-2000006966,Point Break Arcade,Panama City,FL,https://www.facebook.com/PointBreakArcade?mibextid=ZbWKwL,95,False,0,0,0,95,0.0,0,False,,
+-2000010741,Automated Services Showroom,Milford,CT,https://pinballs.com/,94,True,3,344,14,94,0.1489,190,False,https://pinballs.com/arcade-game-machines/,Arcade Games | Pinballs.com
+1912,Logan Arcade,Chicago,IL,http://loganarcade.com/,94,True,1,7,0,94,0.0,7,False,https://www.loganarcade.com/games,GAMES LIST — Logan Arcade
+-2000005203,Main Event (Avon),Avon,OH,https://www.mainevent.com/locations/ohio/avon/,94,True,0,0,0,94,0.0,0,False,,
+2033,Round One: Littleton,Littleton,CO,http://www.round1usa.com/location/southwest-plaza/,94,False,0,0,0,94,0.0,0,False,,
+8395,Arcade 80s,Rochester,NY,https://www.flowercityamusement.com/,93,True,0,0,0,93,0.0,0,False,,
+-2000007602,Big Game Room Arcade (Kalahari Poconos),Pocono Manor,PA,https://www.kalahariresorts.com/pennsylvania/things-to-do/experiences/big-game-room/,93,True,0,0,0,93,0.0,0,False,,
+1399,Barcade @ Fishtown,Philadelphia,PA,http://barcadephiladelphia.com/games/,92,False,0,0,0,89,0.0,0,False,,
+1216,Flippers,Grandy,NC,http://flippersarcade.com/,92,True,0,0,0,92,0.0,0,False,,
+1577,Sportland Arcade,Ocean City,MD,https://www.facebook.com/SportlandArcadeOcMd,92,False,0,0,0,91,0.0,0,False,,
+-2000006467,Western Mass Pinball Club,Three Rivers,MA,https://westernmasspinball.com,92,True,1,85,0,92,0.0,85,False,https://westernmasspinball.com/western-mass-pinball-league.html,Western Mass Pinball League - Western Mass Pinball
+480,Circus Circus,Las Vegas,NV,http://www.circuscircus.com/,91,True,0,0,0,91,0.0,0,False,,
+8350,Draftcade @ Richmond,Richmond,VA,https://draftcade.com/richmond/gallery-richmond/,91,True,0,0,0,90,0.0,0,False,,
+926,"Pinball Parlour, The",Earlington,PA,http://www.pinball-parlour.com/,91,True,0,0,0,91,0.0,0,False,,
+-2000004402,Round1 Bowling & Arcade (Gateway Mall),Lincoln,NE,https://round1usa.com,91,True,0,0,0,91,0.0,0,False,,
+1038,Salem Willows Park,Salem,MA,http://www.salemwillowspark.com/contact.html,90,False,0,0,0,88,0.0,0,False,,
+-2000006136,Dave & Buster's (Gateway Center),Brooklyn,NY,https://www.daveandbusters.com/us/en/about/locations/brooklyn,89,True,0,0,0,89,0.0,0,False,,
+-2000011167,Dave & Buster's (King of Prussia),King of Prussia,PA,https://www.daveandbusters.com/us/en/about/locations/king-of-prussia,89,True,0,0,0,89,0.0,0,False,,
+8442,Neon Moon,Johnson City,TN,https://www.neonmoon.com/,89,True,1,12,1,89,0.0112,9,False,https://www.neonmoon.com/pinball-list,Pinball List | Explore Pinball Classics Today - Discover & Play — Neon Moon
+1062,Casino Arcade,Santa Cruz,CA,,88,False,0,0,0,88,0.0,0,False,,
+8424,Fizzy's Arcade,Milton,PA,https://fizzysarcade.com/,88,True,2,121,62,85,0.7294,54,True,https://fizzysarcade.com/fizzys-arcade-game-list/,Fizzy’s Arcade Game List – Fizzy's Arcade
+-2000008493,The Gameroom Powered By Hasbro,East Rutherford,NJ,https://gameroomad.com/,88,True,0,0,0,88,0.0,0,False,,
+147,Arcade UFO,Austin,TX,http://www.arcadeufo.com/,87,True,1,98,52,87,0.5977,54,True,http://www.arcadeufo.com/#games,Arcade UFO
+-2000001660,Coliseum Arcade (Cedar Point),Sandusky,OH,https://www.cedarpoint.com/rides-experiences/coliseum-arcade,87,True,0,0,0,87,0.0,0,False,,
+-2000003447,Dave & Buster's (Manchester),Manchester,CT,https://www.daveandbusters.com/us/en/about/locations/manchester/,87,True,0,0,0,87,0.0,0,False,,
+-2000008396,Spinners Pinball Arcade,Frederick,MD,https://www.spinnerspinball.org/,87,True,1,136,69,87,0.7931,66,True,https://www.spinnerspinball.org/our-games,Over 150+ retro and modern arcade games at Frederick Maryland's ONLY 501(c)3 non-profit arcade — Spinners Pinball Arcade
+8376,Velum Fermentation,Pittsburgh,PA,http://velumfermentation.com/,87,True,0,0,0,86,0.0,0,False,,
+-2000006164,Dave & Buster's (Camp Hill),Camp Hill,PA,https://www.daveandbusters.com/us/en/about/locations/camp-hill-harrisburg,86,True,0,0,0,86,0.0,0,False,,
+3066,Daytona Arcade Museum,Daytona Beach,FL,http://www.daytonaarcademuseum.com/,86,True,0,0,0,85,0.0,0,False,,
+-1000015638,Rochester Pinball Collective,East Rochester,NY,https://rochesterpinball.com/,86,True,3,165,85,86,0.9884,77,True,https://rochesterpinball.com/#game-list,Rochester Pinball Collective - Pinball Arcade
+-2000003190,Speedy's Fast Track,Houston,TX,http://houstonfasttrack.com/,86,True,0,0,0,86,0.0,0,False,,
+6168,16-Bit Bar+Arcade & Pins Mechnical,Nashville,TN,https://www.facebook.com/16BitBarNashville/,85,False,0,0,0,84,0.0,0,False,,
+8411,Hometown Arcade @ Bloomfield,Bloomfield,NJ,https://nj.hometownarcade.com,85,True,2,138,53,83,0.6386,91,True,https://nj.hometownarcade.com/games,Hometown Arcade - Good Times | Great Games | Free Play
+308,Scandia Family Fun Center,Fairfield,CA,http://www.scandiafamilycenter.com/,85,True,0,0,0,84,0.0,0,False,,
+8384,Scrappleland,Brooklyn,NY,https://scrappleland.com,85,True,1,129,18,83,0.2169,115,False,https://scrappleland.com#pinball,Scrappleland Pinball and Bar – Arcade – Cocktails – Rooftop
+8310,The Game is Afoot Arcade,Warrington,PA,https://www.thegameisafootarcade.com/,85,True,0,0,0,83,0.0,0,False,,
+-2000005009,Up-Down - St. Louis,St. Louis,MO,http://www.updownarcadebar.com/st-louis/,85,True,3,186,0,85,0.0,62,False,https://updownarcadebar.com/st-louis/#tab_6a4f00274d691,St. Louis – Up-Down Arcade Bar
+54,GameWorks - Woodfield Mall,Schaumburg,IL,http://www.gameworks.com,84,True,0,0,0,84,0.0,0,False,,
+-2000009154,Holy Frijoles,Baltimore,MD,https://www.holyfrijoles.net/,84,True,0,0,0,84,0.0,0,False,,
+1653,Fast Forward Arcade,Lake Buena Vista,FL,,83,False,0,0,0,83,0.0,0,False,,
+8329,Humdingers,Paramus,NJ,https://www.humdingersnj.com/bowl,83,True,0,0,0,83,0.0,0,False,,
+-2000000064,Marty's Playland,Ocean City,MD,https://www.martysplayland.com/,83,True,0,0,0,83,0.0,0,False,,
+-2000004164,Round1 Bowling & Arcade (Maine Mall),South Portland,ME,http://www.round1usa.com/location/maine-mall/,83,False,0,0,0,83,0.0,0,False,,
+-2000005961,The Works at Wyomissing,Wyomissing,PA,,83,False,0,0,0,83,0.0,0,False,,
+8338,Arcade 92 @ Flower Mound,Flower Mound,TX,https://www.arcade92.com/flowermound,82,True,0,0,0,81,0.0,0,False,,
+-2000002695,Fun Land of Fredericksburg,Fredericksburg,VA,https://www.visitfunland.com/fredericksburg-home,82,True,0,0,0,82,0.0,0,False,,
+8381,Hollywood Arcade,Ocean City,NJ,,82,False,0,0,0,81,0.0,0,False,,
+-1000029302,Julie's Pinball,Farmington,MN,https://juliespinball.com/,82,True,2,109,68,82,0.8293,32,True,https://juliespinball.com/games,Games
+12,Mega Play,Mishawaka,IN,http://www.mega-play.com,82,True,0,0,0,80,0.0,0,False,,
+-2000009362,Pinball Long Island,Patchogue,NY,https://pinballlongisland.com/,82,True,0,0,0,82,0.0,0,False,,
+-2000010107,Tilt Studio (Sandusky),Sandusky,OH,https://tiltstudio.com/sandusky/,82,True,0,0,0,82,0.0,0,False,,
+7222,Up Down Arcade,Milwaukee,WI,https://www.updownarcadebar.com/milwaukee/,82,True,3,201,1,82,0.0122,65,False,https://updownarcadebar.com/milwaukee/#tab_6a4efafb61597,Milwaukee – Up-Down Arcade Bar
+3073,8 Bit Beercade Bloomington,Bloomington,IL,https://www.facebook.com/8BitBeercadeBloomington/,81,False,0,0,0,81,0.0,0,False,,
+1318,Beercade,Omaha,NE,http://www.thebeercade.com/,81,True,1,293,36,80,0.45,259,True,https://beercade.com/#games,"Beercade Arcade Bar | Omaha, NE"
+13,Chuck E. Cheese,Hampton,VA,http://www.chuckecheese.com/,81,True,0,0,0,81,0.0,0,False,,
+-2000010726,Chuck E. Cheese (North Chesterfield),Richmond,VA,https://www.chuckecheese.com/richmond-chesterfield/,81,True,0,0,0,81,0.0,0,False,,
+-2000007941,Chuck E. Cheese (Staten Island),Staten Island,NY,https://locations.chuckecheese.com/us/ny/staten-island/1775-p-south-ave.,81,True,0,0,0,81,0.0,0,False,,
+-2000008001,Dave & Buster's (Atlantic City),Atlantic City,NJ,https://www.daveandbusters.com/us/en/about/locations/atlantic-city,81,True,0,0,0,81,0.0,0,False,,
+1725,Jenkinson's Boardwalk,Pt. Pleasant Beach,NJ,http://www.jenkinsons.com/attractions/fun-games,81,True,3,207,0,81,0.0,73,False,https://jenkinsons.com/explore/fun-games/,Fun & Games | Boardwalk
+11,Klassic Arcade 1.0,Gobles,MI,http://www.klassicarcade.com/,81,True,0,0,0,81,0.0,0,False,,
+-1000024344,The Kickback,Middleton,WI,http://thekickback.bar,81,True,2,274,76,81,0.9383,129,True,https://thekickback.bar/games-list/,Games List – The Kickback Bar
+3076,The Neutral Zone,Chesterfield,MO,http://theneutralzonestl.weebly.com,81,True,2,27,6,81,0.0741,22,False,https://theneutralzonestl.weebly.com/games.html,Games for Sale - ARCADE & TOY STORE
+7211,Arcade 92,McKinney,TX,https://www.arcade92.com/,80,True,0,0,0,80,0.0,0,False,,
+-2000004657,Jeremy's Downtown Arcade,Nampa,ID,http://jeremysdowntownarcade.com/,80,True,1,7,0,80,0.0,7,False,http://jeremysdowntownarcade.com/games.html,Jeremy's Downtown Arcade
+7224,Retrocade,Rowlett,TX,https://retrocadeoftexas.com/,80,False,0,0,0,80,0.0,0,False,,
+3067,Draftcade,Kansas City,MO,https://draftcade.com/,79,True,0,0,0,79,0.0,0,False,,
+1159,Funarama,Hampton Beach,NH,http://www.hamptonbeach.org/area-attractions.cfm,79,False,0,0,0,79,0.0,0,False,,
+-2000011156,Main Event Entertainment (Deer Park),Deer Park,NY,https://www.mainevent.com/locations/new-york/deer-park/,79,True,0,0,0,79,0.0,0,False,,
+6139,Prince Arcades,Bolingbrook,IL,http://princearcades.com,79,True,1,35,0,79,0.0,35,False,https://princearcades.com/product/themed-multigame/,Themed MultiGame - Prince Arcades
+-1000016621,Clubhouse Arcade,Fremont,MI,http://www.clubhousearcademi.com,78,True,1,122,48,78,0.6154,75,True,https://clubhousearcademi.com/game-list/,Game List – Clubhouse Arcade
+-2000011021,Draftcade (Virginia Beach),Virginia Beach,VA,https://draftcade.com/virginia-beach/,78,True,0,0,0,78,0.0,0,False,,
+-2000004165,Round1 Bowling & Arcade (Coronado Center),Albuquerque,NM,,78,False,0,0,0,78,0.0,0,False,,
+19,Tornado Terrys,Keller,TX,https://tornadoterrys.com/,78,True,0,0,0,78,0.0,0,False,,
+-2000008408,Barcade (Center City Philadelphia),Philadelphia,PA,https://barcade.com/philadelphia/,77,False,0,0,0,77,0.0,0,False,,
+965,Dave & Busters,Miami,FL,http://www.daveandbusters.com/Locations/Default.aspx,77,True,0,0,0,77,0.0,0,False,,
+861,Playland Arcade,Santa Monica,CA,http://santamonicapier.org/fun/,77,False,0,0,0,77,0.0,0,False,,
+-1000025423,The Pinball Asylum,Fort Myers,FL,https://pinballasylum.com/,77,True,3,127,0,77,0.0,53,False,https://pinballasylum.com/about/home/asylum-inmates-pinball-league/,The Asylum Inmates PINBALL LEAGUE
+-2000008956,Tiebreakers,Johnson City,TN,http://tiebreakers.com/,77,True,0,0,0,77,0.0,0,False,,
+-2000004853,Tokyo Station,Arlington,TX,https://tokyostationdfw.com/,77,True,0,0,0,77,0.0,0,False,,
+1938,Barcade New York,New York,NY,http://barcadenewyork.com/,76,True,1,20,0,76,0.0,20,False,https://barcade.com/games,Games - Barcade® - The Original Arcade Bar
+-2000005729,Dave & Buster's (Whitehall),Whitehall,PA,https://www.daveandbusters.com/us/en/about/locations/lehigh,76,True,0,0,0,76,0.0,0,False,,
+-2000008063,Fun Stop Arcade,Berlin,NJ,https://funstoparcade.com/,76,True,1,88,30,76,0.3947,59,True,https://funstoparcade.com/our-games,Our Games
+7208,Up Down @ Nashville,Nashville,TN,https://www.updownarcadebar.com/nashville/,76,True,3,186,0,75,0.0,62,False,https://updownarcadebar.com/nashville/#tab_6a4efb4baa07f,Nashville – Up-Down Arcade Bar
+-2000010302,Chuck E. Cheese (Hicksville),Hicksville,NY,https://www.chuckecheese.com/hicksville-ny/,75,True,0,0,0,75,0.0,0,False,,
+-2000001916,Fun City Arcade,Ocean City,MD,https://funcityoc.com/,75,True,0,0,0,75,0.0,0,False,,
+8334,Hometown Arcade @ Northampton,Northampton,MA,https://northampton.hometownarcade.com/,75,True,2,144,50,73,0.6849,97,True,https://northampton.hometownarcade.com/games,Hometown Arcade - Good Times | Great Games | Free Play
+7267,Klassic Arcade 3.0,Paw Paw,MI,http://klassicarcade.com/,75,True,0,0,0,73,0.0,0,False,,
+1532,Level Up Arcade,Eugene,OR,http://www.leveluparcade.com/contact,75,False,0,0,0,75,0.0,0,False,,
+-2000005150,Portal Pinball Arcade,Acworth,GA,https://portalpinball.com/,75,True,1,45,0,75,0.0,45,False,https://portalpinball.com/#HomeGames,Portal Pinball Arcade – Metro Atlanta Pinball & Retro Arcade
+8415,Scohy Bros. Flashback Arcade,Vienna,WV,https://www.facebook.com/profile.php?id=100049991122431#,75,False,0,0,0,75,0.0,0,False,,
+-2000006335,Super Abari Game Bar,Charlotte,NC,http://abarigamebar.com/,75,True,0,0,0,75,0.0,0,False,,
+1815,Wilderness at the Smokies,Sevierville,TN,http://www.wildernessatthesmokies.com/smokymountainresort-amenities/resort-amenities-arcade.html,75,False,0,0,0,75,0.0,0,False,,
+-2000009655,Dave & Buster's (Johnson City),Johnson City,NY,https://www.daveandbusters.com/us/en/about/locations/johnson-city,74,True,0,0,0,74,0.0,0,False,,
+-2000007550,Dave & Buster's (The River at Rancho Mirage),Rancho Mirage,CA,https://www.daveandbusters.com/us/en/about/locations/rancho-mirage,74,True,0,0,0,74,0.0,0,False,,
+-2000008242,Starrcade,Kennesaw,GA,http://starrcade.com,74,True,1,29,0,74,0.0,29,False,http://www.starrcade.com/repair-service/,Repair & Service – Starrcade
+1009,Canobie Lake Park,Salem,NH,http://www.canobie.com/games.php,73,False,0,0,0,72,0.0,0,False,,
+-2000009531,Chuck E. Cheese (Alexandria),Alexandria,VA,https://locations.chuckecheese.com/us/va/alexandria/6301-richmond-hwy.,73,True,0,0,0,73,0.0,0,False,,
+-2000010946,The Pinball Asylum,Fort Myers,FL,https://pinballasylum.com/,73,True,3,127,0,73,0.0,53,False,https://pinballasylum.com/about/home/asylum-inmates-pinball-league/,The Asylum Inmates PINBALL LEAGUE
+762,Another Castle@Edmonds Arcade Edition,Edmonds,WA,http://www.anothercastlegames.com,72,True,1,23,0,72,0.0,23,False,https://anothercastlegames.com/repair/,Repair | Another Castle Games
+-2000007605,Chuck E. Cheese (Whitehall),Whitehall,PA,https://locations.chuckecheese.com/us/pa/whitehall/1000-lehigh-valley-mall,72,True,0,0,0,72,0.0,0,False,,
+-2000007866,Flippin' Great Pinball,Tallahassee,FL,https://flippingreat.com/wp,72,True,0,0,0,72,0.0,0,False,,
+-1000019477,Game Gallery,Langhorne,PA,https://gamegallerylanghorne.com,72,True,2,51,0,72,0.0,40,False,https://gamegallerylanghorne.com/retail,Retail
+1453,OH WOW! @ Madera,Madera,CA,http://ohwow-arcade.com/Games.php?store=Mad,72,False,0,0,0,72,0.0,0,False,,
+4090,Quarter World Arcade,Portland,OR,http://www.quarterworldarcade.com/,72,True,2,274,46,72,0.6389,126,True,https://www.quarterworldarcade.com/#games-section,QuarterWorld
+-2000000630,Zone 28,Pittsburgh,PA,https://www.zone28.com/,72,True,0,0,0,72,0.0,0,False,,
+-1000018970,Arcade Legacy Sharonville,Cincinnati,OH,https://www.arcadelegacyohio.com/,71,True,1,157,61,71,0.8592,94,True,https://arcadelegacyohio.com/115-2/,Game List - Arcade Legacy
+-1000007352,Silverball Retro Arcade,Delray Beach,FL,http://www.silverballmuseum.com,71,True,0,0,0,71,0.0,0,False,,
+-2000007599,Arcadia Arcade (Camelback Resort & Indoor Waterpark),Tannersville,PA,https://www.camelbackresort.com/poconos-indoor-activities/arcadia-arcade/,70,True,0,0,0,70,0.0,0,False,,
+-2000008962,Fourth Dimension Fun Center,Frederick,MD,https://4dfun.com/,70,True,0,0,0,70,0.0,0,False,,
+788,Funland Arcade,Seaside,OR,http://www.shopseaside.com/fl/fl.html,70,False,0,0,0,70,0.0,0,False,,
+154,Gearbox Software,Plano,TX,,70,False,0,0,0,70,0.0,0,False,,
+5116,Izzy's Arcade Bar,Niles,IL,https://www.izzysarcadebar.com/,70,True,0,0,0,70,0.0,0,False,,
+691,Knoebels Amusement Resort,Elysburg,PA,http://www.knoebels.com/,70,True,1,133,0,70,0.0,133,False,https://knoebels.com/games/?v=0b3b97fa6688,Games – Knoebels Amusement Resort
+273,Safari Land,Villa Park,IL,http://www.safarilandfun.com,70,True,1,33,0,70,0.0,33,False,https://safarilandfun.com/arcade-games/,Play Arcade Games - Safari Land Indoor Amusement Park
+-1000013135,Western Mass Pinball Club,Palmer,MA,http://westernmasspinball.com,70,True,1,85,0,70,0.0,85,False,https://westernmasspinball.com/western-mass-pinball-league.html,Western Mass Pinball League - Western Mass Pinball
+-2000008817,Bartari,Scranton,PA,https://bartari570.com/,69,True,0,0,0,69,0.0,0,False,,
+-2000010804,Delaware Pinball Collective,Wilmington,DE,https://www.delawarepinballcollective.com/,69,True,0,0,0,69,0.0,0,False,,
+793,Great Wolf Lodge,Scotrun,PA,http://www.greatwolf.com/poconos/waterpark,69,True,0,0,0,69,0.0,0,False,,
+8341,Leaderboard @ Mandarin Jax,Jacksonville,FL,https://leaderboardarcade.com/shad-road-location/shad-road-games/,69,False,0,0,0,69,0.0,0,False,,
+1293,OH WOW! @ Fresno,Fresno,CA,http://ohwow-arcade.com/index.php,69,True,2,48,0,66,0.0,41,False,https://ohwow-arcade.com/arcade-games-at-baji-online/,Baji: What are Arcade Games and How to Start Playing
+-2000005231,Riverside Game Lab,Riverside,CA,https://www.riversidegamelab.com/,69,True,1,131,39,69,0.5652,90,True,https://www.riversidegamelab.com/games,Explore Our Games | Riverside Game Lab
+-2000000080,Rockin' Raceway,Pigeon Forge,TN,https://faceamusement.com/experiences/rockin-raceway/,69,True,0,0,0,69,0.0,0,False,,
+-2000011018,Arcade Archaeology,Queensbury,NY,https://silverballshow.org/pinballmuseum/,68,True,2,161,36,68,0.5294,102,True,https://silverballshow.org/bestofthebest/,Museum Collection – Saratoga Silverball Pinball Show
+-1000014554,Crazy Quarters Arcade,Bay City,MI,https://www.crazyquartersarcade.com,68,True,0,0,0,68,0.0,0,False,,
+-2000001789,Gateway 26 Casino Arcade,Wildwood,NJ,https://gateway26.com/,68,True,0,0,0,68,0.0,0,False,,
+-2000005133,Idaho Pinball Museum,Garden City,ID,,68,False,0,0,0,68,0.0,0,False,,
+1294,OH WOW! @ Merced,Merced,CA,http://ohwow-arcade.com/Directions.php,68,True,2,48,0,68,0.0,41,False,https://ohwow-arcade.com/arcade-games-at-baji-online/,Baji: What are Arcade Games and How to Start Playing
+1665,Rack N Roll,Passaic,NJ,http://www.racknroll.biz/LIST-OF-GAMES.html,68,True,2,39,12,68,0.1765,20,False,https://www.racknroll.biz/List-of-Games.html,List-of-Games
+326,Acton Bowladrome,Acton,MA,http://www.actonbowladrome.com/,67,True,0,0,0,65,0.0,0,False,,
+-2000004461,EightyOne Arcade Bar,Sioux Falls,SD,https://eightyonearca.de/,67,True,1,94,42,67,0.6269,51,True,https://eightyonearca.de/games,Games — EightyOne Arcade Bar — Sioux Falls' biggest arcade bar!
+1968,Neon Retro Arcade,Pasadena,CA,http://www.neonretroarcade.com/,67,True,1,14,1,67,0.0149,14,False,http://www.neonretroarcade.com/games-pasadena.html,Neon Retro Arcade - Games-Pasadena
+8378,Retro Arcade @ Vaporosity,Sharon,PA,https://www.facebook.com/pinballsharon,67,False,0,0,0,67,0.0,0,False,,
+787,Scandia Family Fun Center,Rohnert Park,CA,http://www.scandiafunland.com/,67,True,0,0,0,67,0.0,0,False,,
+8407,Starport @ Hollywood Casino,Washington,PA,https://www.hollywoodmeadows.com/entertainment/starport-arcade,67,True,2,177,0,67,0.0,135,False,https://www.hollywoodmeadows.com/entertainment/h-lounge,H Lounge Lineup | Hollywood Casino at the Meadows
+8308,Two Bit Game Room,St. Paul,MN,https://rentmyarcade.net/two_bit_game_room/,67,True,3,158,61,66,0.9242,32,True,https://rentmyarcade.net/games-display,Games on display | Two Bit Game Room
+-2000006931,Barcade Detroit,Detroit,MI,http://barcadedetroit.com/,66,True,1,20,0,66,0.0,20,False,https://barcade.com/games,Games - Barcade® - The Original Arcade Bar
+1377,Chuck E Cheese,North Bergen,NJ,http://www.chuckecheese.com/loc/485/,66,True,0,0,0,66,0.0,0,False,,
+-2000007348,Chuck E. Cheese (Edison),Edison,NJ,https://locations.chuckecheese.com/us/nj/edison/1120-rte-1-north,66,True,0,0,0,66,0.0,0,False,,
+-2000001366,Dave & Buster's (Legends Outlets),Kansas City,KS,https://www.daveandbusters.com/locations/kansas-city,66,True,0,0,0,66,0.0,0,False,,
+-2000010161,Dave & Buster's (Niles),Niles,OH,https://www.daveandbusters.com/us/en/about/locations/niles,66,True,0,0,0,66,0.0,0,False,,
+-2000004932,FlashBack RetroPub,Oklahoma City,OK,http://www.flashbackretropub.com/,66,True,1,83,1,66,0.0152,82,False,https://www.flashbackretropub.com/okc/games,Games - FlashBack RetroPub®
+6156,Gatlinburg Pinball Museum,Gatlinburg,TN,https://gatlinburgpinballmuseum.com,66,True,0,0,0,66,0.0,0,False,,
+736,Hersheypark,Hershey,PA,http://www.hersheypark.com/,66,True,1,92,0,66,0.0,92,False,https://www.hersheypark.com/things-to-do/games,Amusement Park Games | Hersheypark
+-2000004902,Hollywood Pinball & Arcade Museum,Omaha,NE,https://www.hollywoodcandy.com/hollywood-pinball-arcade,66,True,1,3,0,66,0.0,3,False,https://www.hollywoodcandy.com/hollywood-pinball-arcade/lets-play-pinball-online/,Let’s Play – Hollywood Candy
+-1000010666,Round1 Bowling & Amusement,Sandy,UT,http://round1usa.com,66,True,0,0,0,66,0.0,0,False,,
+-2000004970,Silverball Museum - Delray Beach,Delray Beach,FL,http://silverballmuseum.com/delray-beach/,66,True,3,142,8,66,0.1212,57,False,https://silverballmuseum.com/delray-beach/about/our-machines/,Our Machines - Silverball Retro Arcade - Delray Beach
+-2000005395,TAG's Maniac’s Mansion,Wichita Falls,TX,,66,False,0,0,0,66,0.0,0,False,,
+8281,Timewarp Arcade,Cincinnati,OH,https://timewarparcade.com/,66,True,0,0,0,61,0.0,0,False,,
+385,University Pinball,Philadelphia,PA,http://www.universityfamilyfuncenter.com/,66,True,1,28,13,64,0.2031,17,False,https://universityfamilyfuncenter.com/games/,Games | University Family Fun Center
+-2000008791,Dave & Buster's (Scranton),Moosic,PA,https://www.daveandbusters.com/us/en/about/locations/scranton,65,True,0,0,0,65,0.0,0,False,,
+-2000004540,Laser Bounce (Glendale),Glendale,NY,https://queens.laserbounce.com/,65,True,0,0,0,65,0.0,0,False,,
+6124,Level 419,Northwood,OH,http://level419.com/index.htm,65,False,0,0,0,65,0.0,0,False,,
+36,Phoenix Nest Classic Video Arcade,Mount Vernon,WA,http://www.phoenixnestarcade.com,65,True,1,42,44,65,0.6769,7,True,http://www.phoenixnestarcade.com/games.html,Phoenix Nest Classic Video Arcade and Pinball
+4086,Two Plumbers Brewery & Arcade,St. Charles,MO,http://twoplumbers.com/,65,True,1,67,22,65,0.3385,47,True,https://twoplumbers.com/games,Games — Brewery
+2019,Up-Down @ Minneapolis,Minneapolis,MN,https://www.facebook.com/updownmpls/photos,65,False,0,0,0,65,0.0,0,False,,
+948,Village Arcade,St. Peters,PA,https://www.facebook.com/profile.php?id=100057107243634,65,False,0,0,0,49,0.0,0,False,,
+1363,Boardwalk Indoor Amusement Center,El Cajon,CA,http://www.boardwalk-parkway.com/games.htm,64,False,0,0,0,64,0.0,0,False,,
+-2000009611,Chuck E. Cheese (East Hanover),East Hanover,NJ,https://locations.chuckecheese.com/us/nj/easthanover/145-rt-10,64,True,0,0,0,64,0.0,0,False,,
+1169,Dave & Busters,Orlando,FL,http://www.daveandbusters.com/locations/default.aspx,64,True,0,0,0,64,0.0,0,False,,
+-1000010819,Electric Bat Arcade / Yucca Tap Room,Tempe,AZ,https://www.electricbatarcade.com/,64,True,1,13,0,64,0.0,13,False,https://www.electricbatarcade.com/pinball-list,"Pinball List | Play, Compete, Enjoy Pinball — Electric Bat Arcade Electric Bat Arcade Pinball Machines"
+-2000005120,Jedi Alliance,Spokane,WA,http://www.spokanearcade.com/,64,True,0,0,0,64,0.0,0,False,,
+1897,Main Street Amusements,Lafayette,IN,http://www.msamuse.com/Information.html,64,True,3,329,21,64,0.3281,239,True,https://www.kineticist.com/games/pinball/best,Best Pinball Machines of All Time — Top 250 Ranked by Fun Score | Kineticist
+7202,Mission Control,Santa Ana,CA,https://www.facebook.com/ArcadeMissionControl/?ref=page_internal,64,False,0,0,0,63,0.0,0,False,,
+803,Pinball Pete's,East Lansing,MI,http://www.pinballpetes.net/,64,False,0,0,0,64,0.0,0,False,,
+-1000010790,Pittsburgh Pinball Dojo,Bellevue,PA,https://www.pittsburghpinballdojo.com,64,True,1,87,50,64,0.7812,36,True,https://pittsburghpinballdojo.com/current-games/,Current Games (Updated June 2026) – Pittsburgh Pinball Dojo
+-1000005174,Replay Museum,Tarpon Springs,FL,https://www.replaymuseum.com/,64,True,0,0,0,64,0.0,0,False,,
+-2000006338,Round1 Bowling & Arcade (Stonestown Galleria),San Francisco,CA,https://www.round1usa.com/stonestown-galleria,64,True,1,62,0,64,0.0,62,False,https://www.round1usa.com/activities-list/arcade-games,Round1 Bowling and Arcade | Round1 USA | Arcade near you | Claw Machine | Japanese Arcade Games | Round1 USA
+-2000007567,Spo-Cha at Round1 (Puente Hills Mall),City of Industry,CA,https://www.round1usa.com/,64,True,0,0,0,64,0.0,0,False,,
+8335,"Coliseum, The",Camp Hill,PA,https://www.coliseumfun.com/10000-sq-ft-arcade,63,True,0,0,0,63,0.0,0,False,,
+8375,Kidforce Pinball,Berea,OH,https://www.facebook.com/KidforcePinball/,63,False,0,0,0,63,0.0,0,False,,
+794,Medicine Show Arcade,Lake Buena Vista,FL,http://disneyworld.disney.go.com/resorts/port-orleans-resort-riverside/,63,False,0,0,0,63,0.0,0,False,,
+124,Nickel City,Northbrook,IL,http://www.nickelcitygames.com,63,True,0,0,0,63,0.0,0,False,,
+2000,The Coin Jam,Salem,OR,http://www.thecoinjam.com/,63,True,0,0,0,63,0.0,0,False,,
+-2000006958,The Dugout Arcade + Bar,Baltimore,MD,https://peabodyheightsbrewery.com/dugout-arcade/,63,True,0,0,0,63,0.0,0,False,,
+-1000021066,Alleycat Pinball Arcade,Watervliet,MI,,62,False,0,0,0,62,0.0,0,False,,
+-2000009372,Arcade Escape Zone,Feasterville,PA,https://www.arcadeescapezone.com,62,True,3,111,9,62,0.1452,60,False,https://www.arcadeescapezone.com/category/all-products,All Products | LIVE ArcadeEscapeZon
+2015,Cobra Arcade Bar,Phoenix,AZ,http://cobraarcadebar.com/#games,62,True,1,238,46,61,0.7541,171,True,https://cobraarcadebar.com/game-list/,Game List - Cobra Arcade Bar
+567,Dave & Busters,Marietta,GA,https://www.daveandbusters.com,62,True,1,95,4,62,0.0645,92,False,https://www.daveandbusters.com/us/en/play,"Play Games - Arcade, tabletop, and more, Dave and Buster's"
+-2000008566,Fun Land of Fairfax,Centreville,VA,https://www.visitfunland.com/fairfax-home,62,True,0,0,0,62,0.0,0,False,,
+-1000006805,Pinballz Lake Creek,Austin,TX,http://www.pinballzarcade.com/locate/pinballz-lake-creek,62,True,3,145,0,62,0.0,72,False,https://pinballz.com/lake-creek/lake-creek-buy-rent/,Buy/Rent | Pinballz Lake Creek
+-2000006086,Revival Arcade,San Bernardino,CA,http://revival-arcade.com/,62,True,3,241,36,62,0.5806,192,True,http://revival-arcade.com/consoles.html,Revival Arcade - Console Games
+-2000003857,Shore Fun Family Fun Center,Bethany Beach,DE,https://www.shorefunbethany.com/,62,True,1,18,0,62,0.0,18,False,https://www.shorefunbethany.com/entertainment,Games | Shore Fun Family Fun Center
+489,Tampa Lanes,Tampa,FL,,62,False,0,0,0,62,0.0,0,False,,
+703,Tiki Action Park,Centereach,NY,http://www.tikiactionpark.com,62,True,0,0,0,62,0.0,0,False,,
+-2000010914,Tokens Arcade,Lyndora,PA,https://www.tokensarcade.com/,62,True,0,0,0,62,0.0,0,False,,
+6177,Yetee Station,Aurora,IL,https://yeteestation.fun,62,False,0,0,0,62,0.0,0,False,,
+2032,Akihabara Arcade and Bar,Westminster,CO,https://www.akihabaraarcade.com/,61,True,1,86,27,61,0.4426,61,True,https://www.akihabaraarcade.com/gamelist,Game List — Akihabara Arcade
+386,Arcade Legacy,Forest Park,OH,http://arcadelegacyohio.com/,61,True,1,157,34,61,0.5574,121,True,https://arcadelegacyohio.com/115-2/,Game List - Arcade Legacy
+-2000006219,Coin-Op Sacramento,Sacramento,CA,https://coinopsac.com/,61,False,0,0,0,61,0.0,0,False,,
+-2000004049,Dave & Buster's (Tucson Marketplace at The Bridges),Tucson,AZ,http://www.daveandbusters.com/tucson,61,True,0,0,0,61,0.0,0,False,,
+1166,EightyTwo,Los Angeles,CA,http://eightytwo.la/games/,61,False,0,0,0,61,0.0,0,False,,
+-1000002405,Free Gold Watch,San Francisco,CA,http://www.freegoldwatch.com,61,True,0,0,0,61,0.0,0,False,,
+-2000003563,Fun Quest (Grand Sierra Resort),Reno,NV,,61,False,0,0,0,61,0.0,0,False,,
+-1000017282,Main Street Pinball,Grain Valley,MO,https://mainstreetpinballgv.com/,61,True,0,0,0,61,0.0,0,False,,
+1256,No Limit Arcade,Dundee,IL,http://www.nolimitarcades.com/page/page/8306370.htm,61,False,0,0,0,61,0.0,0,False,,
+1788,Pole Position Raceway @ Jersey City,Jersey City,NJ,http://www.polepositionraceway.com/jersey-city/,61,False,0,0,0,61,0.0,0,False,,
+-2000003678,Up-Down - Kansas City,Kansas City,MO,http://www.updownkc.com/,61,True,3,189,0,61,0.0,63,False,https://updownarcadebar.com/kansas-city/#tab_6a4f01ba1537a,Kansas City – Up-Down Arcade Bar
+49,1984,Springfield,MO,http://www.1984arcade.com,60,True,2,45,1,60,0.0167,31,False,https://www.1984arcade.com/video_games/,VIDEO GAMES | 1984
+-2000006071,Big Game Room Arcade (Kalahari Sandusky),Sandusky,OH,https://www.kalahariresorts.com/ohio/things-to-do/experiences/big-game-room/,60,True,0,0,0,60,0.0,0,False,,
+4096,Dave & Busters (STL),Maryland Heights,MO,http://www.daveandbusters.com/st-louis,60,True,0,0,0,60,0.0,0,False,,
+8325,Retro Ray's Arcade,Elkton,MD,https://retroraysarcade.com/,60,True,3,134,37,60,0.6167,66,True,https://retroraysarcade.com/pinball-machines-arcade-machines,Pinball Machines and Aracade Machines | RetroRaysArcade
+-2000005807,Arcade Monsters (Lido Beach),Sarasota,FL,https://www.arcademonsters.com/,59,True,0,0,0,59,0.0,0,False,,
+-2000010848,Bowlero (Norwalk),Norwalk,CT,https://www.bowlero.com/location/bowlero-norwalk,59,True,0,0,0,59,0.0,0,False,,
+-1000007396,Cactus Jack's Family Fun Center,Oklahoma City,OK,http://www.cjarcade.com/,59,True,3,217,14,59,0.2373,151,False,http://www.cjarcade.com/index.php/the-games/pinball-machines,Pinball Machines
+420,Dave & Busters,Nashville,TN,https://www.daveandbusters.com,59,True,1,95,8,59,0.1356,94,False,https://www.daveandbusters.com/us/en/play,"Play Games - Arcade, tabletop, and more, Dave and Buster's"
+-2000004817,RPM Raceway (Stamford),Stamford,CT,http://race.rpmraceway.com/stamford,59,True,1,29,0,59,0.0,29,False,https://www.rpmraceway.com:443/promotions/rpm-stamford-summer-racing-camps,RPM | RPM Stamford Summer Camps: The Ultimate Summer Adventure for Kids!
+-2000002283,Casino Pier Arcade,Seaside Heights,NJ,https://casinopiernj.com/,58,True,3,208,7,58,0.1207,173,False,https://casinopiernj.com/casino-pier/#arcade,"Casino Pier Rides, Games & Boardwalk Attractions"
+-2000008921,Chuck E. Cheese's (Middletown),Middletown,NJ,https://locations.chuckecheese.com/us/nj/middletown/1107-route-35,58,True,0,0,0,58,0.0,0,False,,
+-2000005398,Cinergy Entertainment Amarillo Featuring EPIC,Amarillo,TX,https://cinergy.com/locations/amarillo/,58,False,0,0,0,58,0.0,0,False,,
+-1000016645,Delaware Pinball Collective,Wilmington,DE,http://delawarepinballcollective.com,58,True,0,0,0,58,0.0,0,False,,
+-1000013623,Flashback Pinball Arcade,Conway,AR,,58,False,0,0,0,58,0.0,0,False,,
+-1000028008,Jay's Silver Ballroom,Peosta,IA,https://www.facebook.com/share/1Bhk2x7vM8/,58,False,0,0,0,58,0.0,0,False,,
+-2000010088,Phoenix Theatres / Rezzanine Esports,Bridgeville,PA,https://www.rezzanineesports.com/,58,True,0,0,0,58,0.0,0,False,,
+-2000005126,Rad Retrocade,Las Cruces,NM,,58,False,0,0,0,58,0.0,0,False,,
+2034,Round One: Bloomingdale,Bloomingdale,IL,http://www.round1usa.com/,58,True,0,0,0,58,0.0,0,False,,
+-2000010819,Barcade (New Haven),New Haven,CT,https://barcade.com/location/new-haven,57,True,1,20,0,57,0.0,20,False,https://barcade.com/games,Games - Barcade® - The Original Arcade Bar
+-1000012412,Captain's Arcade Showroom,Anaheim,CA,https://facebook.com/captainsarcade,57,False,0,0,0,57,0.0,0,False,,
+1584,Dogpatch Arcade,Lake Ozark,MO,https://www.facebook.com/Dogpatch-Arcade-1872986966256747/,57,False,0,0,0,57,0.0,0,False,,
+-2000011074,Downtown Flavortown (Pigeon Forge),Pigeon Forge,TN,https://downtownflavortown.com/,57,True,0,0,0,57,0.0,0,False,,
+828,Golfland USA,Sunnyvale,CA,http://www.golfland.com/sunnyvale/index.asp,57,False,0,0,0,57,0.0,0,False,,
+-2000003990,Lucky Strike (North Brunswick),North Brunswick,NJ,https://www.luckystrikeent.com/location/lucky-strike-north-brunswick,57,True,0,0,0,57,0.0,0,False,,
+2039,Pinball Jones,Fort Collins,CO,http://pinballjones.com/,57,True,2,123,34,57,0.5965,72,True,https://pinballjones.com/pinball-machines/,Pinball Machines | Pinball Jones
+8369,Pins Mechanical Co.,Austin,TX,https://www.pinsbar.com/locations/austin/activities,57,True,0,0,0,56,0.0,0,False,,
+-1000006958,Recbar,Louisville,KY,http://www.recbarlouisville.com/,57,True,1,138,51,57,0.8947,86,True,https://www.recbarlouisville.com/games.html,Games - RECBAR - LOUISVILLE'S LARGEST ARCADE BAR!
+-2000002235,Round1 Bowling & Arcade (Moreno Valley Mall),Moreno Valley,CA,http://www.round1usa.com/location/moreno-valley-mall/,57,False,0,0,0,57,0.0,0,False,,
+857,Tilt @ Vancouver Mall,Vancouver,WA,http://www.tilt.com,57,True,0,0,0,57,0.0,0,False,,
+-2000001784,Fantasy Island Amusement Park,Beach Haven,NJ,http://www.fantasyislandpark.com/,56,True,1,33,4,56,0.0714,31,False,https://fantasyislandlbi.com/fun/boardwalk-games/,Boardwalk Games - Fantasy Island Amusement Park
+-2000009801,Max Funland (86th St),Brooklyn,NY,https://www.MaxFunlandNY.com,56,True,0,0,0,56,0.0,0,False,,
+-2000004122,The Castle Fun Center,Chester,NY,http://thecastlefuncenter.com,56,True,0,0,0,56,0.0,0,False,,
+-2000008650,Xtreme Play Adrenaline Park,Danbury,CT,https://xtremeplayct.com/,56,True,0,0,0,56,0.0,0,False,,
+-2000007607,Cyber Quest / Kids Quest (Wind Creek Bethlehem),Bethlehem,PA,https://www.kidsquest.com/location/windcreekbethlehemcq/,55,True,3,198,0,55,0.0,68,False,https://www.kidsquest.com/amenity/arcade-games/,Kids Quest Activities for Kids & Families - Arcade Games
+1228,Dave & Busters,Orange,CA,http://www.daveandbusters.com/locations/default.aspx,55,True,0,0,0,55,0.0,0,False,,
+6140,Galloping Ghost Pinball,Brookfield,IL,https://www.gallopingghostarcade.com,55,True,2,1125,52,53,0.9811,1058,True,https://www.gallopingghostarcade.com/games-list/,Games List | Galloping Ghost Arcade
+829,Golfland Sunsplash,Mesa,AZ,http://www.golfland.com/mesa/attractions.asp,55,False,0,0,0,55,0.0,0,False,,
+1751,Indiana Beach Amusement Resort,Monticello,IN,http://www.indianabeach.com/,55,True,1,24,0,55,0.0,24,False,https://www.indianabeach.com/games/,Games | Indiana Beach
+-1000007145,Jedi Alliance,Spokane,WA,https://spokanearcade.com,55,True,0,0,0,55,0.0,0,False,,
+597,Odyssey Fun World,Tinley Park,IL,http://www.odysseyfunworld.com/,55,True,0,0,0,55,0.0,0,False,,
+-2000007302,Playopolis Arcade (The Kartrite Resort & Indoor Waterpark),Monticello,NY,https://www.thekartrite.com/explore/indoor-adventures/,55,True,0,0,0,55,0.0,0,False,,
+-2000003125,Round1 Bowling & Arcade (Arlington Parks),Arlington,TX,,55,False,0,0,0,55,0.0,0,False,,
+-2000011096,Spo-Cha at Round1 (Cumberland Mall),Atlanta,GA,https://www.round1usa.com/locations/045clm,55,True,1,62,0,55,0.0,62,False,https://www.round1usa.com/activities-list/arcade-games,Round1 Bowling and Arcade | Round1 USA | Arcade near you | Claw Machine | Japanese Arcade Games | Round1 USA
+-2000010783,Throwbacks Arcade,Culpeper,VA,https://throwbacksarcade.com/,55,True,1,83,44,55,0.8,40,True,https://throwbacksarcade.com/games,Throwbacks Arcade - Step Back in Time to the Golden Age of Gaming
+-2000009247,Wilmington Home Amusements,Wilmington,DE,https://www.wilmingtonamusements.com/,55,True,0,0,0,55,0.0,0,False,,
+839,Chuck E. Cheese,Altoona,PA,http://www.chuckecheese.com/locations/show-map.php?Id=449,54,True,0,0,0,54,0.0,0,False,,
+-2000007129,Chuck E. Cheese (Union),Union,NJ,https://locations.chuckecheese.com/us/nj/union/2700-us-22-east,54,True,0,0,0,54,0.0,0,False,,
+39,Dave & Busters,Homestead,PA,http://www.daveandbusters.com/About/,54,False,0,0,0,54,0.0,0,False,,
+1258,Emporium @ Wicker Park,Chicago,IL,http://emporiumchicago.com/,54,True,0,0,0,54,0.0,0,False,,
+6141,Flynn's Retrocade,Roy,UT,https://flynnsretrocade.com/,54,True,0,0,0,54,0.0,0,False,,
+-2000003648,Game Nest,Las Vegas,NV,http://www.gamenestlv.com/,54,True,1,82,13,54,0.2407,70,False,https://gamenestlv.com/arcade-games,"Games | Discover, Play, Explore - Join the Fun — Game Nest"
+-2000009388,Jackpot Pinball Arcade,Purcellville,VA,,54,False,0,0,0,54,0.0,0,False,,
+-1000021849,Northstar Pinball Collective,Savage,MN,https://www.facebook.com/northstarpinballcollective,54,False,0,0,0,54,0.0,0,False,,
+-2000010662,Out of Order Arcade,Auburn,CA,https://www.outoforderarcadeauburn.com/,54,True,0,0,0,54,0.0,0,False,,
+-2000009319,Pins Mechanical Company (Charlotte),Charlotte,NC,https://www.pinsbar.com/locations/charlotte,54,True,1,49,7,54,0.1296,42,False,https://www.pinsbar.com/locations/charlotte/activities,Activities | Pins Charlotte
+1635,Playland Park,Flint,MI,https://www.facebook.com/PlaylandParkFlint,54,False,0,0,0,54,0.0,0,False,,
+2040,Press Play Bar,Boulder,CO,http://www.pressplaybar.com/,54,True,1,51,30,54,0.5556,24,True,http://www.pressplaybar.com/games.html,Press Play Bar Boulder
+903,The 1up – LoDo,Denver,CO,http://www.the-1up.com/lodo/,54,False,0,0,0,54,0.0,0,False,,
+-2000006681,The Arcade House (Palisades Center),West Nyack,NY,https://palisadescenter.com/store/arcade-house/,54,True,0,0,0,54,0.0,0,False,,
+1262,Add-a-Ball,Seattle,WA,http://add-a-ball.com,53,True,0,0,0,51,0.0,0,False,,
+1977,"Baxter Bar & Arcade, The",Carrboro,NC,http://www.baxterarcade.com/,53,True,1,51,21,53,0.3962,30,True,http://www.baxterarcade.com/games_and_scores/,"Games | The Baxter – 108 N. Graham St. Chapel Hill, NC 27510"
+1790,Dave & Busters,Utica,MI,,53,False,0,0,0,53,0.0,0,False,,
+-2000011189,Disney's All-Star Movies Resort – Reel Fun Arcade,Lake Buena Vista,FL,https://disneyworld.disney.go.com/resorts/all-star-movies-resort/,53,False,0,0,0,53,0.0,0,False,,
+8365,Family Fun Arcade,Cape May,NJ,https://capemayarcades.com/,53,True,0,0,0,53,0.0,0,False,,
+-2000008966,GameOn Bar+Arcade (Columbia),Columbia,MD,https://www.gameonbararcade.com/columbia,53,True,1,17,2,53,0.0377,16,False,https://www.gameonbararcade.com/copy-of-games--baltimore,"Bar | Annapolis, MD | (410) 885-4589"
+881,GameWorks,Tempe,AZ,http://www.gameworks.com/?tId=1&sId=14,53,True,0,0,0,53,0.0,0,False,,
+896,Golf N' Stuff,Ventura,CA,http://www.golfnstuff.com/location/ventura/contact.htm,53,False,0,0,0,53,0.0,0,False,,
+419,Hermitage Lanes,Hermitage,TN,http://www.hermitagelanes.com/,53,False,0,0,0,53,0.0,0,False,,
+1973,Level 257,Schaumburg,IL,https://www.level257.com,53,False,0,0,0,53,0.0,0,False,,
+7241,Pints N Play,Blue Springs,MO,https://www.facebook.com/pintsnplay2022,53,False,0,0,0,53,0.0,0,False,,
+-2000004439,Round1 Bowling & Arcade (Burbank Town Center),Burbank,CA,,53,False,0,0,0,53,0.0,0,False,,
+-1000009186,What's Brewing? Coffee Roasters,San Antonio,TX,http://www.sacoffeeroasters.com,53,True,1,62,24,53,0.4528,39,True,https://www.sacoffeeroasters.com/pinball,Pinball — San Antonio Coffee Roasters: What's Brewing
+823,Zanzabar,Louisville,KY,http://www.zanzabarlouisville.com/,53,True,0,0,0,52,0.0,0,False,,
+-2000011083,Arcade City (Gatlinburg),Gatlinburg,TN,https://arcadecity.com/gatlinburg/,52,True,0,0,0,52,0.0,0,False,,
+141,Asheville Pinball Museum,Asheville,NC,http://ashevillepinball.com/,52,True,0,0,0,52,0.0,0,False,,
+-2000005357,Disney's All Star Music Resort – Note'able Games,Lake Buena Vista,FL,https://disneyworld.disney.go.com/resorts/all-star-music-resort/,52,False,0,0,0,52,0.0,0,False,,
+-2000007487,Flip Off Arcade,Puyallup,WA,https://www.flipoffarcade.com/,52,True,0,0,0,52,0.0,0,False,,
+1312,Game On @ Mohegan,Montville,CT,https://gameonmohegan.com/,52,True,0,0,0,52,0.0,0,False,,
+1737,Gameworks,Ontario,CA,,52,False,0,0,0,52,0.0,0,False,,
+1024,Musée Mécanique,San Francisco,CA,http://museemecaniquesf.com/visit.php,52,True,0,0,0,52,0.0,0,False,,
+24,Shorty's,Seattle,WA,http://www.shortydog.com,52,True,0,0,0,47,0.0,0,False,,
+-2000004906,What's Brewing? Coffee Roasters,San Antonio,TX,https://www.sacoffeeroasters.com/pinball,52,True,0,0,0,52,0.0,0,False,,
+1320,Brewskis Bar,San Diego,CA,http://www.brewskissd.com/,51,True,1,12,0,50,0.0,12,False,https://www.brewskissd.com/games,Our Games | Brewski's Bar & Arcade – San Diego
+-2000006494,Cedar Point's Castaway Bay,Sandusky,OH,https://www.castawaybay.com/,51,True,0,0,0,51,0.0,0,False,,
+-2000008993,Disney's All-Star Sports Resort – Game Point Arcade,Lake Buena Vista,FL,https://disneyworld.disney.go.com/resorts/all-star-sports-resort/,51,False,0,0,0,51,0.0,0,False,,
+-2000009508,Electric Dreams Arcade,Perkasie,PA,,51,False,0,0,0,51,0.0,0,False,,
+-2000009394,Game On Arcade & Bar,Lafayette,IN,https://www.gameonlafayette.com/,51,True,0,0,0,51,0.0,0,False,,
+-2000010627,Hoopla's Xtreme Family Fun Center,Shamokin Dam,PA,https://www.hooplasxtreme.com/,51,False,0,0,0,51,0.0,0,False,,
+-2000003011,Laser Bounce (Levittown),Levittown,NY,https://longisland.laserbounce.com/,51,True,0,0,0,51,0.0,0,False,,
+1441,Lucky Leo's,Seaside Heights,NJ,http://www.luckyleosamusements.com/home.html,51,False,0,0,0,51,0.0,0,False,,
+-2000010326,Mystery Fun House Arcade Experience Powered by Chuck E. Cheese,Kissimee,FL,http://mysteryfunhouse.com,51,True,0,0,0,51,0.0,0,False,,
+6129,National Video Game Museum,Frisco,TX,http://www.nvmusa.org/,51,True,0,0,0,51,0.0,0,False,,
+-1000004430,Nickel Mania,Orem,UT,http://nickelmaniagames.com,51,True,0,0,0,51,0.0,0,False,,
+-2000010437,PIXELS Pints & Bytes,Norfolk,VA,https://pixelspintsandbytes.com/,51,True,0,0,0,51,0.0,0,False,,
+-2000002336,Pocket Change,Lancaster,PA,https://atthepierarcade.com/,51,True,1,17,7,51,0.1373,10,False,https://atthepierarcade.com/games/,Games - At The Pier Arcade
+1200,Pojo's Family Fun Center,Boise,ID,https://www.pojos.com/,51,True,0,0,0,51,0.0,0,False,,
+-2000004367,Round1 Bowling & Arcade (Park Place Mall),Tucson,AZ,,51,False,0,0,0,51,0.0,0,False,,
+-1000022602,The Lazarus Pinball Museum,Fenton,MO,https://lazaruspinballmuseum.com/,51,True,0,0,0,51,0.0,0,False,,
+-1000025131,The Tokyo Club,Columbia,MO,https://www.facebook.com/profile.php?id=61570514392675,51,False,0,0,0,51,0.0,0,False,,
+2002,Vector Volcano Arcade,Bend,OR,http://vectorvolcanoarcade.com/games.html,51,True,0,0,0,51,0.0,0,False,,
+-1000011336,Appalachian Pinball Museum,Hendersonville,NC,https://facebook.com/pinballplayers/,50,False,0,0,0,50,0.0,0,False,,
+-2000010957,Back to the 80s,Hazleton,PA,,50,False,0,0,0,50,0.0,0,False,,
+1219,Blairally Vintage Arcade,Eugene,OR,http://www.facebook.com/blairallyarcade?sk=info,50,False,0,0,0,50,0.0,0,False,,
+-2000008357,Chuck E. Cheese (Deptford),Deptford,NJ,https://locations.chuckecheese.com/us/nj/deptford/1500-almonesson-rd.,50,True,0,0,0,50,0.0,0,False,,
+-2000010393,Chuck E. Cheese (Jersey City),Jersey City,NJ,https://www.chuckecheese.com/jersey-city-nj/,50,True,0,0,0,50,0.0,0,False,,
+-2000007340,Chuck E. Cheese's (Dover),Dover,DE,https://locations.chuckecheese.com/us/de/dover/1275-n.-dupont-hwy.,50,True,0,0,0,50,0.0,0,False,,
+-2000009219,Continues Arcade,Alexandria,VA,https://www.continuesarcade.com/,50,True,1,66,30,50,0.6,37,True,https://www.continuesarcade.com/games-continues,"GAMES — Continues Arcade - Alexandria, VA"
+-1000018502,Das Flipperhaus,Rocklin,CA,https://www.dasflipperhaus.com/,50,True,1,16,0,50,0.0,16,False,https://dasflipperhaus.com/pinball-machines,"Pinball Machines in Rocklin, CA | Das Flipperhaus"
+915,Hoopla's Family Fun & Grill,Muncy,PA,http://www.hooplas.com/arcade.html,50,True,0,0,0,50,0.0,0,False,,
+-2000010458,Kennywood Penny Arcade,West Mifflin,PA,https://www.kennywood.com/,50,True,0,0,0,50,0.0,0,False,,
+-1000013779,Logan Street Market,Louisville,KY,http://www.loganstmarket.com,50,True,0,0,0,50,0.0,0,False,,
+-1000006370,One Well Brewing,Kalamazoo,MI,https://onewellbrewing.com,50,True,1,49,0,50,0.0,49,False,https://www.onewellbrewing.com/pinball,Pinball & Arcade — One Well Brewing
+1828,Player's Choice @ North Myrtle Beach,Myrtle Beach,SC,https://www.facebook.com/PlayersChoiceMB?fref=ts,50,False,0,0,0,50,0.0,0,False,,
+290,Richie Knucklez (closed),Flemington,NJ,http://www.richieknucklezarcade.com/,50,True,0,0,0,50,0.0,0,False,,
+-1000020069,Scanlines Arcade,Kokomo,IN,https://www.facebook.com/ScanlinesArcade/,50,False,0,0,0,50,0.0,0,False,,
+-1000028235,Spinners Pinball Arcade,Frederick,MD,http://www.spinnerspinball.org/,50,True,1,136,43,50,0.86,90,True,https://www.spinnerspinball.org/our-games,Over 150+ retro and modern arcade games at Frederick Maryland's ONLY 501(c)3 non-profit arcade — Spinners Pinball Arcade
+-2000008951,The Detour,San Francisco,CA,https://www.detoursf.com/,50,True,1,93,29,50,0.58,65,True,https://www.detoursf.com/games-list/,"Games List | The Detour | Restaurant and Arcade Bar in San Francisco, CA"
+6150,Colonial Soldier Arcade,Deptford Township,NJ,https://www.colonialsoldierarcade.com,49,True,0,0,0,49,0.0,0,False,,
+802,Emerald Hills Golfland,San Jose,CA,http://www.golfland.com/sanjose/directions.asp,49,False,0,0,0,49,0.0,0,False,,
+1307,Fun Dungeon,Las Vegas,NV,http://www.excalibur.com/attractions/fundungeon.aspx,49,False,0,0,0,49,0.0,0,False,,
+1608,Gameworks,Newport,KY,http://www.gameworks.com/locations/newport/,49,True,0,0,0,49,0.0,0,False,,
+-2000008772,Great Wolf Lodge (Williamsburg),Williamsburg,VA,https://www.greatwolf.com/williamsburg,49,True,1,108,0,49,0.0,108,False,https://www.greatwolf.com/williamsburg/waterpark-attractions/events,Williamsburg Activities for Kids & Families | Great Wolf Lodge
+946,Kitchen Den Bar: Easton Town Center,Columbus,OH,http://www.kdbeaston.com/,49,True,0,0,0,49,0.0,0,False,,
