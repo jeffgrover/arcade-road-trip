@@ -7,7 +7,9 @@ from scan_arcade_web_rosters import (
     RosterPageResult,
     compare_roster_to_database,
     extract_machine_name_candidates,
+    extract_pinside_machine_names,
     is_internal_url,
+    should_follow_roster_url,
     load_candidates,
     load_location_game_names,
     normalize_url,
@@ -62,6 +64,29 @@ class WebRosterReporterTests(unittest.TestCase):
         self.assertTrue(is_internal_url("https://www.example.test", "https://example.test/games"))
         self.assertFalse(is_internal_url("https://example.test", "https://elsewhere.test/games"))
 
+    def test_should_follow_roster_url_allows_trusted_external_hosts(self):
+        self.assertTrue(
+            should_follow_roster_url(
+                "https://pasttimesarcade.com",
+                "https://pinside.com/pinball/map/where-to-play/17578-past-times-arcade-girard-oh",
+                True,
+            )
+        )
+        self.assertFalse(
+            should_follow_roster_url(
+                "https://pasttimesarcade.com",
+                "https://pinside.com/pinball/map/where-to-play/17578-past-times-arcade-girard-oh",
+                False,
+            )
+        )
+        self.assertFalse(
+            should_follow_roster_url(
+                "https://pasttimesarcade.com",
+                "https://www.arcade-museum.com/members/detail/Past-Times-Arcade-504534",
+                True,
+            )
+        )
+
     def test_extract_machine_name_candidates_filters_page_chrome(self):
         names = extract_machine_name_candidates(
             """
@@ -78,6 +103,25 @@ class WebRosterReporterTests(unittest.TestCase):
 
         self.assertEqual(names, ["Medieval Madness", "The Addams Family", "Attack from Mars", "1942", "Galaga"])
 
+    def test_extract_pinside_machine_names_uses_games_list_marker(self):
+        names = extract_pinside_machine_names(
+            """
+            Header
+            There are are 3 games listed for this location.
+            "300"
+            EM Gottlieb, 1975 - Added on 2023-05-25
+            Machine: Bride of Pinbot, The
+            SS Williams, 1991 - Added on 2024-08-31
+            Medieval Madness
+            SS Williams, 1997 - Added on 2023-05-25
+            Photos
+            Not A Game
+            Contact us
+            """
+        )
+
+        self.assertEqual(names, ["300", "Bride of Pinbot, The", "Medieval Madness"])
+
     def test_compare_roster_to_database_reports_matches_and_gaps(self):
         page = RosterPageResult(
             source_text="Games",
@@ -89,17 +133,17 @@ class WebRosterReporterTests(unittest.TestCase):
             content_type="text/html",
             title="Game List",
             roster_score=8,
-            extracted_names=["Medieval Madness", "Attack from Mars", "Website Only Game"],
+            extracted_names=["Medieval Madness", "Attack from Mars", "Atarians, The", "Website Only Game"],
             cache_path="/tmp/example.html",
             error="",
         )
 
         comparison = compare_roster_to_database(
-            ["Medieval Madness", "Attack from Mars", "Missing DB Game"],
+            ["Medieval Madness", "Attack from Mars", "The Atarians", "Missing DB Game"],
             [page],
         )
 
-        self.assertEqual(comparison.matched_db_games, ["Medieval Madness", "Attack from Mars"])
+        self.assertEqual(comparison.matched_db_games, ["Medieval Madness", "Attack from Mars", "The Atarians"])
         self.assertEqual(comparison.missing_db_games, ["Missing DB Game"])
         self.assertEqual(comparison.website_only_names, ["Website Only Game"])
 
@@ -173,7 +217,7 @@ class WebRosterReporterTests(unittest.TestCase):
             conn.execute("CREATE TABLE games(game_id BIGINT, name VARCHAR)")
             conn.execute("CREATE TABLE location_games(location_id BIGINT, game_id BIGINT)")
             conn.execute("INSERT INTO games VALUES (10, 'Medieval Madness'), (11, 'Attack from Mars')")
-            conn.execute("INSERT INTO location_games VALUES (1, 10), (1, 11), (2, 10)")
+            conn.execute("INSERT INTO location_games VALUES (1, 10), (1, 10), (1, 11), (2, 10)")
 
             names = load_location_game_names(conn, [1, 2, 3])
 

@@ -70,6 +70,9 @@ IGNORED_HINT_HOSTS = {
     "x.com",
     "youtube.com",
 }
+TRUSTED_EXTERNAL_ROSTER_HOSTS = {
+    "pinside.com",
+}
 
 
 @dataclass(frozen=True)
@@ -229,6 +232,16 @@ def is_internal_url(base_url: str, target_url: str) -> bool:
     return normalized_host(base_url) == normalized_host(target_url)
 
 
+def is_trusted_external_roster_url(url: str) -> bool:
+    return normalized_host(url) in TRUSTED_EXTERNAL_ROSTER_HOSTS
+
+
+def should_follow_roster_url(base_url: str, target_url: str, allow_trusted_external: bool) -> bool:
+    return is_internal_url(base_url, target_url) or (
+        allow_trusted_external and is_trusted_external_roster_url(target_url)
+    )
+
+
 def has_locations_column(conn: duckdb.DuckDBPyConnection, column_name: str) -> bool:
     row = conn.execute(
         """
@@ -331,6 +344,7 @@ def score_links(links: list[tuple[str, str]], limit: int = 10) -> list[LinkHint]
 def normalize_game_name(value: str) -> str:
     normalized = html.unescape(value).lower()
     normalized = re.sub(r"\([^)]*\)", " ", normalized)
+    normalized = re.sub(r"^(.+),\s*(the|a|an)$", r"\2 \1", normalized)
     normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
     return normalize_space(normalized)
 
@@ -370,7 +384,7 @@ def extract_machine_name_candidates(text: str, limit: int = 200) -> list[str]:
         line = re.sub(r"^\s*[-*\u2022]\s+", "", line)
         line = re.sub(r"^\s*\d+[\.)]\s+", "", line)
         line = re.sub(r"\s+(?:\(?(?:working|down|needs repair|out of order|coming soon|sold)\)?)$", "", line, flags=re.I)
-        line = line.strip(" :-\u2013\u2014|")
+        line = line.strip(" :-\u2013\u2014|\"")
         if not line or len(line) < 3 or len(line) > 80:
             continue
         if re.search(r"\b\d{1,2}\s*(?:am|pm)\b", line, flags=re.I):
@@ -399,6 +413,52 @@ def extract_machine_name_candidates(text: str, limit: int = 200) -> list[str]:
         if len(candidates) >= limit:
             break
     return candidates
+
+
+def extract_pinside_machine_names(text: str, limit: int = MAX_EXTRACTED_NAMES_PER_PAGE) -> list[str]:
+    lines = [normalize_space(line) for line in text.splitlines()]
+    start = None
+    for index, line in enumerate(lines):
+        if re.search(r"\b\d+\s+games\s+listed\s+for\s+this\s+location\b", line, flags=re.I):
+            start = index + 1
+            break
+    if start is None:
+        return []
+
+    names: list[str] = []
+    seen: set[str] = set()
+    for line in lines[start:]:
+        if not line:
+            continue
+        if line.lower() in {"comments", "pictures", "photos", "location comments"}:
+            break
+        if line.lower().startswith("visit this location"):
+            break
+        if re.search(r"\badded\s+on\s+\d{4}-\d{2}-\d{2}\b", line, flags=re.I):
+            continue
+        if re.match(r"^(?:em|ss|solid state|electro-mechanical)\b", line, flags=re.I):
+            continue
+        line = re.sub(r"^Machine:\s*", "", line, flags=re.I).strip()
+        candidates = extract_machine_name_candidates(line, limit=1)
+        if not candidates:
+            continue
+        candidate = candidates[0]
+        key = normalize_game_name(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(candidate)
+        if len(names) >= limit:
+            break
+    return names
+
+
+def extract_machine_names_from_page(url: str, text: str, limit: int = MAX_EXTRACTED_NAMES_PER_PAGE) -> list[str]:
+    if normalized_host(url) == "pinside.com":
+        names = extract_pinside_machine_names(text, limit=limit)
+        if names:
+            return names
+    return extract_machine_name_candidates(text, limit=limit)
 
 
 def cache_file_for_url(cache_dir: Path, url: str) -> Path:
@@ -473,6 +533,7 @@ def discover_roster_pages(
     max_bytes: int,
     max_pages: int,
     delay_seconds: float,
+    allow_trusted_external: bool,
 ) -> list[RosterPageResult]:
     if not probe.ok:
         return []
@@ -481,7 +542,7 @@ def discover_roster_pages(
     for hint in probe.link_hints:
         if len(pages) >= max_pages:
             break
-        if not is_internal_url(probe.final_url, hint.url):
+        if not should_follow_roster_url(probe.final_url, hint.url, allow_trusted_external):
             continue
         signature = hint.url.rstrip("/")
         if signature in seen_urls:
@@ -493,7 +554,7 @@ def discover_roster_pages(
         print(f"probing roster page hint: {hint.text} -> {hint.url}")
         fetched = fetch_page(hint.url, cache_dir, timeout_seconds, max_bytes)
         if fetched.ok:
-            extracted = extract_machine_name_candidates(fetched.text, limit=MAX_EXTRACTED_NAMES_PER_PAGE)
+            extracted = extract_machine_names_from_page(fetched.final_url, fetched.text)
             roster_score = keyword_score(fetched.title) + keyword_score(fetched.text[:5000])
         else:
             extracted = []
@@ -521,7 +582,7 @@ def load_location_game_names(conn: duckdb.DuckDBPyConnection, location_ids: list
     if not location_ids:
         return {}
     sql = f"""
-        SELECT lg.location_id, g.name
+        SELECT DISTINCT lg.location_id, g.name
         FROM location_games lg
         JOIN games g ON g.game_id = lg.game_id
         WHERE lg.location_id IN ({placeholders(location_ids)})
@@ -729,6 +790,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--location-id", type=int, action="append", default=[])
     parser.add_argument("--probe", action="store_true", help="Fetch each candidate homepage once and score likely roster links.")
     parser.add_argument("--discover-pages", action="store_true", help="Fetch high-scoring internal roster-page links from probed homepages.")
+    parser.add_argument("--no-external-roster-hosts", action="store_true", help="Do not follow trusted external roster hosts such as Pinside.")
     parser.add_argument("--max-roster-pages", type=int, default=DEFAULT_MAX_ROSTER_PAGES)
     parser.add_argument("--compare", action="store_true", help="Compare discovered roster-page text against current DB machine names.")
     parser.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
@@ -780,6 +842,7 @@ def main() -> int:
                     args.max_bytes,
                     args.max_roster_pages,
                     args.delay_seconds,
+                    not args.no_external_roster_hosts,
                 )
 
     comparisons: dict[int, RosterComparison] = {}
