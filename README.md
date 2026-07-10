@@ -181,7 +181,10 @@ Owner website roster validation is a separate research workflow. The first
 pass reports large active arcades with website URLs. Optional slow-and-low
 flags can probe homepages, follow likely internal roster links, extract
 candidate machine names, and compare those names with the current database.
-It does not modify curated machine placements:
+It does not modify curated machine placements. The reconciliation step uses a
+strict `review_ready` gate; pages with high match rates but noisy extraction or
+large add/remove churn are intentionally held for parser work instead of being
+treated as direct-review candidates:
 
 ```bash
 .venv/bin/python scan_arcade_web_rosters.py --limit 25

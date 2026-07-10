@@ -64,12 +64,12 @@ class WebRosterReconciliationTests(unittest.TestCase):
             "city": "Denver",
             "state": "CO",
             "game_count": "10",
-            "match_ratio": "0.8",
+            "match_ratio": "0.92",
             "best_roster_url": "https://example.test/games",
         }
         comparison = {
-            "db_game_count": 10,
-            "matched_db_games": ["Galaga"] * 8,
+            "db_game_count": 100,
+            "matched_db_games": ["Galaga"] * 92,
             "missing_db_games": ["Bride of Pinbot, The", "Missing Game"],
             "website_only_names": ["Bride of Pinbot", "New Game", "Another New Game", "Third New Game", "Pinball Repair"],
         }
@@ -80,7 +80,7 @@ class WebRosterReconciliationTests(unittest.TestCase):
         self.assertEqual(result.remove_candidate_count, 1)
         self.assertEqual(result.canonical_candidate_count, 1)
         self.assertEqual(result.ignored_website_name_count, 1)
-        self.assertEqual(result.review_status, "review_ready")
+        self.assertEqual(result.review_status, "needs_parser")
         self.assertEqual(result.add_candidates, ["New Game", "Another New Game", "Third New Game"])
         self.assertEqual(result.remove_candidates, ["Missing Game"])
         self.assertEqual(result.ignored_website_names, ["Pinball Repair"])
@@ -91,8 +91,8 @@ class WebRosterReconciliationTests(unittest.TestCase):
         ready = detect_review_status(
             match_ratio=0.9,
             db_game_count=100,
-            add_candidate_count=10,
-            remove_candidate_count=10,
+            add_candidate_count=5,
+            remove_candidate_count=5,
             ignored_website_name_count=1,
             website_only_name_count=20,
         )
@@ -118,6 +118,16 @@ class WebRosterReconciliationTests(unittest.TestCase):
         )
         self.assertEqual(noisy[0], "needs_parser")
 
+        almost = detect_review_status(
+            match_ratio=0.9,
+            db_game_count=100,
+            add_candidate_count=12,
+            remove_candidate_count=12,
+            ignored_website_name_count=1,
+            website_only_name_count=20,
+        )
+        self.assertEqual(almost[0], "needs_parser")
+
     def test_build_reconciliations_can_filter_review_ready_records(self):
         manifest_records = [
             {
@@ -128,7 +138,7 @@ class WebRosterReconciliationTests(unittest.TestCase):
                 "name": "Clean Arcade",
                 "city": "Denver",
                 "state": "CO",
-                "match_ratio": "0.9",
+                "match_ratio": "0.95",
                 "best_roster_url": "https://clean.example/games",
             },
             {
