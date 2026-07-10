@@ -48,6 +48,15 @@ Public GitHub Pages URL:
   records evidence in sidecar tables.
 - `scan_google_maps_closures.py`: explicit slow Google Maps URL closure probe
   for review-led status curation.
+- `scan_arcade_web_rosters.py`: report-only owner-website roster discovery
+  that produces manifest candidate ledgers.
+- `reconcile_web_rosters.py`: report-only review-plan builder for likely
+  owner rosters; it proposes add/remove/canonical candidates without writing
+  machine placements.
+- `apply_web_roster_reconciliation.py`: audited single-location applier for
+  human-reviewed owner roster plans. It defaults to dry-run, writes a DuckDB
+  backup with `--backup`, and records actions in
+  `web_roster_reconciliation_actions`.
 - `validate_pinballmap_locations.py`: Pinball Map API validation for locations
   that have a known Pinball Map id.
 - `validate_ziv_locations.py`: Zenius -I- vanisher validation for U.S.
@@ -69,6 +78,7 @@ with Aurcade ids:
 - Pinball Map machine id `N` becomes `-(1000000000 + N)`.
 - ZIv location id `N` becomes `-(2000000000 + N)`.
 - ZIv game id `N` becomes `-(2000000000 + N)`.
+- Owner-roster-only game rows start at `-4000000000` and count downward.
 
 DuckDB is canonical. Do not add migration/bootstrap paths for obsolete local
 database formats.
@@ -93,6 +103,8 @@ schema stays intact:
 - `game_canonical_links`: source-specific game rows that should be interpreted
   as the same canonical game for counts, rarity, and matching. This preserves
   original `games` and `location_games` rows instead of rewriting imports.
+- `web_roster_reconciliation_actions`: audit trail for single-location
+  owner-roster reconciliation writes.
 
 ## Operations
 

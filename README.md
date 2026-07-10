@@ -188,6 +188,11 @@ It does not modify curated machine placements:
 .venv/bin/python scan_arcade_web_rosters.py --limit 5 --probe --delay-seconds 10
 .venv/bin/python scan_arcade_web_rosters.py --limit 3 --discover-pages --delay-seconds 10
 .venv/bin/python scan_arcade_web_rosters.py --limit 3 --compare --delay-seconds 10
+.venv/bin/python reconcile_web_rosters.py --manifest-report reports/web_roster_manifests_20260708_201128.csv --limit 10
+.venv/bin/python reconcile_web_rosters.py --manifest-report reports/web_roster_manifests_20260708_201128.csv --limit 0 --review-ready-only
+.venv/bin/python reconcile_web_rosters.py --manifest-report reports/web_roster_manifests_20260708_201128.csv --location-id 638 --limit 0 --max-names 500
+.venv/bin/python apply_web_roster_reconciliation.py --reconciliation-report reports/web_roster_reconciliation_YYYYMMDD_HHMMSS.json --location-id 638
+.venv/bin/python apply_web_roster_reconciliation.py --reconciliation-report reports/web_roster_reconciliation_YYYYMMDD_HHMMSS.json --location-id 638 --apply --backup
 ```
 
 ## Quick Checks
@@ -197,6 +202,6 @@ It does not modify curated machine placements:
 .venv/bin/python sync_arcade_data.py --plan-only
 .venv/bin/python generate_static_app.py
 .venv/bin/python -m unittest discover -s tests
-.venv/bin/python -m py_compile arcade_db.py arcade_query.py canonicalize_games.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scan_google_maps_closures.py scan_arcade_web_rosters.py scrape_aurcade_locations.py curate_us_sources.py us_states.py sync_arcade_data.py maintain_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
+.venv/bin/python -m py_compile arcade_db.py arcade_query.py canonicalize_games.py import_pinballmap_locations.py import_pinballmap_api.py import_ziv_locations.py merge_ziv_machines.py validate_pinballmap_locations.py validate_ziv_locations.py verify_locations_osm.py scan_google_maps_closures.py scan_arcade_web_rosters.py reconcile_web_rosters.py apply_web_roster_reconciliation.py scrape_aurcade_locations.py curate_us_sources.py us_states.py sync_arcade_data.py maintain_duckdb.py generate_static_app.py export_static_data.py generate_dashboard.py
 .venv/bin/python arcade_query.py sql "SELECT COUNT(*) AS locations FROM locations"
 ```
