@@ -657,13 +657,16 @@ async def scan_work_items(
     conn: duckdb.DuckDBPyConnection,
     work_items: list[tuple[int | None, str]],
     args: argparse.Namespace,
+    already_scanned: int = 0,
 ) -> int:
     scanned = 0
+    total_items = len(work_items)
     for index, (location_id, query) in enumerate(work_items, start=1):
         if index > 1:
             delay = next_delay(args.min_delay_seconds, args.max_delay_seconds)
             print(f"sleeping {delay:.1f}s before next Google Maps request")
             await asyncio.sleep(delay)
+        print(f"scanning location {index}/{total_items} (overall {already_scanned + index})")
         checked_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         try:
             scan = await scan_query(query, args.timeout_ms, args.settle_ms)
@@ -725,7 +728,7 @@ async def scan_locations(args: argparse.Namespace) -> int:
                 break
 
             print(f"checking {len(work_items)} Google Maps URL search(es)")
-            total_scanned += await scan_work_items(conn, work_items, args)
+            total_scanned += await scan_work_items(conn, work_items, args, already_scanned=total_scanned)
             if args.query or args.sample or args.location_id or not args.loop:
                 break
             if args.max_scans is not None and total_scanned >= args.max_scans:
