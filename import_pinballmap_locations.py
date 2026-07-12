@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Import Pinball Map data into the canonical Arcade Road Trip DuckDB database.
 
-The Aurcade schema uses source-native integer primary keys. Pinball Map ids
-share the same integer shape but not the same namespace, so this importer keeps
-Aurcade ids positive and derives negative ids for Pinball Map-only records.
+Source-native IDs are recorded in ``game_source_records``. Existing legacy
+negative IDs remain readable during migration, but newly applied records attach
+to canonical game IDs instead of creating negative game rows.
 
 By default the script performs a dry run. Pass --apply to write changes.
 """
@@ -22,6 +22,7 @@ from typing import Iterable, Optional
 import duckdb
 
 from arcade_db import DEFAULT_DUCKDB, connect as duckdb_connect, execute_script
+from game_provenance import attach_source_record, ensure_schema as ensure_game_provenance_schema, resolve_source_game
 
 
 PINBALLMAP_ID_OFFSET = 1_000_000_000
@@ -579,6 +580,7 @@ def build_address_text(location: PinballMapLocation) -> Optional[str]:
 
 
 def upsert_game(conn: duckdb.DuckDBPyConnection, game_id: int, machine: PinballMapMachine) -> None:
+    ensure_game_provenance_schema(conn)
     if conn.execute("SELECT 1 FROM games WHERE game_id = ?", (game_id,)).fetchone():
         conn.execute(
             """
@@ -594,6 +596,7 @@ def upsert_game(conn: duckdb.DuckDBPyConnection, game_id: int, machine: PinballM
             "INSERT INTO games(game_id, name, manufacturer) VALUES (?, ?, ?)",
             (game_id, machine.name, machine.manufacturer),
         )
+    attach_source_record(conn, "pinballmap", machine.pinballmap_machine_id, game_id, machine.name, machine.manufacturer)
 
 
 def upsert_location_game(
@@ -771,9 +774,14 @@ def import_bundle(
             coalesced_update_location(conn, location_id, location, fetched_at, source_url)
 
         for machine in bundle.machines.values():
-            game_id = game_ids.get(machine.pinballmap_machine_id)
-            if game_id is None:
+            planned_game_id = game_ids.get(machine.pinballmap_machine_id)
+            if planned_game_id is None:
                 continue
+            game_id = resolve_source_game(
+                conn, "pinballmap", machine.pinballmap_machine_id, machine.name,
+                machine.manufacturer, matched_game_id=planned_game_id if planned_game_id > 0 else None,
+            )
+            game_ids[machine.pinballmap_machine_id] = game_id
             upsert_game(conn, game_id, machine)
 
         for placement in bundle.placements:

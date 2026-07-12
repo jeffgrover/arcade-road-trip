@@ -25,6 +25,7 @@ from urllib.request import Request, urlopen
 import duckdb
 
 from arcade_db import DEFAULT_DUCKDB, connect as duckdb_connect, execute_script
+from game_provenance import attach_source_record, ensure_schema as ensure_game_provenance_schema
 
 
 BASE_URL = "https://www.aurcade.com"
@@ -625,6 +626,7 @@ def upsert_detail(conn: duckdb.DuckDBPyConnection, detail: LocationDetail, fetch
 
 
 def upsert_games(conn: duckdb.DuckDBPyConnection, games: Iterable[LocationGame], fetched_at: str) -> int:
+    ensure_game_provenance_schema(conn)
     count = 0
     for game in games:
         if conn.execute("SELECT 1 FROM games WHERE game_id = ?", (game.game_id,)).fetchone():
@@ -642,6 +644,7 @@ def upsert_games(conn: duckdb.DuckDBPyConnection, games: Iterable[LocationGame],
                 "INSERT INTO games(game_id, name, manufacturer) VALUES (?, ?, ?)",
                 (game.game_id, game.name, game.manufacturer),
             )
+        attach_source_record(conn, "aurcade", game.game_id, game.game_id, game.name, game.manufacturer)
         location_game = (
             game.location_id,
             game.game_id,

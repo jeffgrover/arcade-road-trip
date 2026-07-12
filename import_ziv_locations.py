@@ -2,8 +2,8 @@
 """Import Zenius -I- vanisher locations into the Aurcade-compatible schema.
 
 This importer is intentionally conservative. It imports only locations that do
-not already match an Aurcade/Pinball Map/local row, and it stores ZIv ids in a
-separate negative-id namespace.
+not already match an Aurcade/Pinball Map/local row, and records ZIv IDs in the
+game provenance table instead of creating new negative game identities.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from typing import Any, Optional
 import duckdb
 
 from arcade_db import DEFAULT_DUCKDB, has_table
+from game_provenance import ensure_schema as ensure_game_provenance_schema, resolve_source_game
 from validate_ziv_locations import (
     USER_AGENT,
     ZIV_API,
@@ -193,6 +194,7 @@ def upsert_override_links(conn: duckdb.DuckDBPyConnection, plan: ImportPlan, che
 
 
 def insert_locations(conn: duckdb.DuckDBPyConnection, plan: ImportPlan, checked_at: str) -> None:
+    ensure_game_provenance_schema(conn)
     location_rows = []
     link_rows = []
     verification_rows = []
@@ -252,7 +254,7 @@ def insert_locations(conn: duckdb.DuckDBPyConnection, plan: ImportPlan, checked_
             )
         )
         for machine in detail.machines:
-            game_id = ziv_db_id(machine.game_id)
+            game_id = resolve_source_game(conn, "ziv", machine.game_id, machine.game_name)
             game_rows[game_id] = (game_id, machine.game_name)
             location_game_rows.append(
                 (

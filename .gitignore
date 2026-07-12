@@ -16,6 +16,8 @@ static/data/
 *.baseline*.duckdb
 *.pre_sync_*.duckdb
 backups/
+build/
+*.pre_provenance.bak
 *.db-journal
 *.duckdb.wal
 rare_games_*.md

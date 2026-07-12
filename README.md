@@ -93,6 +93,14 @@ one deployable HTML artifact:
 - `curate_us_sources.py`: national source-enrichment orchestrator.
 - `maintain_duckdb.py`: checkpoint helper used before static export; can also
   compact the database with `--compact` after deletes/removals.
+- `game_provenance.py`: canonical game identity and source-ID provenance
+  helpers used by source imports.
+- `migrate_game_provenance.py`: backfills source provenance before any game
+  duplicate purge; it does not delete games or placements.
+- `export_curation_artifacts.py`: exports provenance, review decisions, and
+  location-validation sidecars as mergeable JSONL under `curation/`.
+- `rebuild_curation_db.py`: creates a generated DuckDB artifact from a base
+  snapshot plus the merged `curation/` files.
 - `export_static_data.py`: shared Parquet snapshot builders used by the atlas.
 - `generate_dashboard.py`: shared destination-summary builder used by the atlas.
 - `generate_static_app.py`: primary generator for `static/arcade_road_trip.html`.
@@ -103,6 +111,25 @@ This repository grew out of an Aurcade scrape, then merged in Pinball Map and
 Zenius -I- vanisher data. The database keeps the original Aurcade-compatible
 schema while using sidecar tables for provenance, status curation, validation
 links, and canonical game mappings.
+
+Game provenance is now recorded in `game_source_records`. The table maps each
+source-native game ID to the canonical `games.game_id` that should receive
+future placements. Existing negative-ID rows remain in place during the
+transition so duplicate review and migration can be audited before the later
+purge. New Pinball Map and ZIv imports attach source IDs to canonical positive
+IDs instead of creating new negative game rows.
+
+The mergeable curation layer is separate from the generated DuckDB file:
+
+```bash
+python3 export_curation_artifacts.py --db arcade_roadtrip.duckdb --output-dir curation
+python3 rebuild_curation_db.py --base-db arcade_roadtrip.duckdb --artifacts-dir curation
+```
+
+Commit the JSONL files under `curation/` when they represent shared decisions.
+Treat `build/` and the DuckDB file as generated artifacts; rebuild them after
+merging branches. Location validation can export its evidence into the same
+curation directory after its long-running scan completes.
 
 Active/inactive location status vocabulary is centralized in `arcade_db.py`.
 The CLI and static atlas data builders use that shared definition so closed or

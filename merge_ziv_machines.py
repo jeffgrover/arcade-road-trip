@@ -21,6 +21,7 @@ from typing import Optional
 import duckdb
 
 from arcade_db import execute_script, rows as duckdb_rows
+from game_provenance import ensure_schema as ensure_game_provenance_schema, resolve_source_game
 from import_pinballmap_locations import ExistingGame, game_similarity
 from import_ziv_locations import DEFAULT_CACHE, DEFAULT_DB, ZivDetail, fetch_ziv_detail, ziv_db_id
 from validate_ziv_locations import ZivArcade, connect, ensure_schema, fetch_ziv_us_arcades
@@ -312,8 +313,20 @@ def build_plan(
 
 
 def apply_plan(conn: duckdb.DuckDBPyConnection, decisions: list[MachineDecision], checked_at: str) -> None:
+    ensure_game_provenance_schema(conn)
+    effective_game_ids: dict[int, int] = {}
+    for decision in decisions:
+        effective_game_ids[decision.ziv_machine_id] = resolve_source_game(
+            conn,
+            "ziv",
+            decision.ziv_game_id,
+            decision.ziv_game_name,
+            matched_game_id=decision.local_game_id,
+        )
     game_rows = {
-        decision.local_game_id: (decision.local_game_id, decision.local_game_name)
+        effective_game_ids[decision.ziv_machine_id]: (
+            effective_game_ids[decision.ziv_machine_id], decision.local_game_name
+        )
         for decision in decisions
         if decision.insert_game
     }
@@ -325,9 +338,10 @@ def apply_plan(conn: duckdb.DuckDBPyConnection, decisions: list[MachineDecision]
     for decision in decisions:
         if not decision.insert_location_game:
             continue
+        game_id = effective_game_ids[decision.ziv_machine_id]
         if conn.execute(
             "SELECT 1 FROM location_games WHERE location_id = ? AND game_id = ?",
-            (decision.location_id, decision.local_game_id),
+            (decision.location_id, game_id),
         ).fetchone():
             conn.execute(
                 """
@@ -336,7 +350,7 @@ def apply_plan(conn: duckdb.DuckDBPyConnection, decisions: list[MachineDecision]
                     fetched_at = ?
                 WHERE location_id = ? AND game_id = ?
                 """,
-                (decision.cabinet_type, checked_at, decision.location_id, decision.local_game_id),
+                (decision.cabinet_type, checked_at, decision.location_id, game_id),
             )
         else:
             conn.execute(
@@ -347,7 +361,7 @@ def apply_plan(conn: duckdb.DuckDBPyConnection, decisions: list[MachineDecision]
                 )
                 VALUES (?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?)
                 """,
-                (decision.location_id, decision.local_game_id, decision.cabinet_type, checked_at),
+                (decision.location_id, game_id, decision.cabinet_type, checked_at),
             )
     for decision in decisions:
         conn.execute(
@@ -367,7 +381,7 @@ def apply_plan(conn: duckdb.DuckDBPyConnection, decisions: list[MachineDecision]
                 decision.ziv_location_id,
                 decision.ziv_machine_id,
                 decision.ziv_game_id,
-                decision.local_game_id,
+                effective_game_ids[decision.ziv_machine_id],
                 decision.confidence,
                 decision.method,
                 checked_at,

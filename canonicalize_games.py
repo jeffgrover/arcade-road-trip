@@ -400,6 +400,23 @@ def apply_links(conn: duckdb.DuckDBPyConnection, links: list[Link]) -> None:
             for link in insertable
         ],
     )
+    # During the transition, keep provenance pointed at the same canonical
+    # identity whenever the legacy linker discovers a new alias. This lets us
+    # retire game_canonical_links later without losing source ownership.
+    if conn.execute(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema='main' AND table_name='game_source_records'"
+    ).fetchone():
+        conn.execute(
+            """
+            UPDATE game_source_records AS source_record
+            SET game_id = links.canonical_game_id,
+                last_seen_at = CURRENT_TIMESTAMP
+            FROM game_canonical_links AS links
+            WHERE source_record.game_id = links.alias_game_id
+              AND links.alias_game_id IN (SELECT unnest(?))
+            """,
+            (alias_ids,),
+        )
 
 
 def write_report(links: list[Link], review_pairs: list[ReviewPair], reports_dir: Path) -> Path:
