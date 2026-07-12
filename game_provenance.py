@@ -36,6 +36,7 @@ def ensure_schema(conn: duckdb.DuckDBPyConnection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_game_source_records_game
             ON game_source_records(game_id);
+        ALTER TABLE game_source_records ADD COLUMN IF NOT EXISTS legacy_game_id BIGINT;
         CREATE TABLE IF NOT EXISTS game_identity_sequence (
             sequence_name VARCHAR PRIMARY KEY,
             next_game_id BIGINT NOT NULL
@@ -107,6 +108,7 @@ def attach_source_record(
     game_id: int,
     name: Optional[str] = None,
     manufacturer: Optional[str] = None,
+    legacy_game_id: Optional[int] = None,
 ) -> int:
     """Attach a source row to a canonical game without creating an alias row."""
     ensure_schema(conn)
@@ -116,14 +118,15 @@ def attach_source_record(
         raise ValueError(f"source record {source}:{source_id} already maps to game {existing}")
     conn.execute("""
         INSERT INTO game_source_records
-            (source, source_game_id, game_id, source_name, source_manufacturer, first_seen_at, last_seen_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+            (source, source_game_id, game_id, source_name, source_manufacturer, legacy_game_id, first_seen_at, last_seen_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (source, source_game_id) DO UPDATE SET
             game_id=excluded.game_id,
             source_name=COALESCE(excluded.source_name, game_source_records.source_name),
             source_manufacturer=COALESCE(excluded.source_manufacturer, game_source_records.source_manufacturer),
+            legacy_game_id=COALESCE(excluded.legacy_game_id, game_source_records.legacy_game_id),
             last_seen_at=excluded.last_seen_at
-    """, (source, int(source_id), int(game_id), name, manufacturer, timestamp, timestamp))
+    """, (source, int(source_id), int(game_id), name, manufacturer, legacy_game_id, timestamp, timestamp))
     return int(game_id)
 
 
@@ -163,7 +166,10 @@ def migrate_existing_records(conn: duckdb.DuckDBPyConnection) -> dict[str, int]:
             continue
         source, source_id = legacy
         target = canonical_id(conn, int(row["game_id"]))
-        attach_source_record(conn, source, source_id, target, row["name"], row["manufacturer"])
+        attach_source_record(
+            conn, source, source_id, target, row["name"], row["manufacturer"],
+            legacy_game_id=int(row["game_id"]),
+        )
         migrated += 1
     conn.execute("""
         INSERT INTO game_identity_sequence(sequence_name, next_game_id)

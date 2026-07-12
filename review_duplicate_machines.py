@@ -37,6 +37,8 @@ AMBIGUOUS_NAMES = {
 @dataclass(frozen=True)
 class GameRecord:
     game_id: int
+    canonical_game_id: int
+    source_game_id: int
     name: str
     manufacturer: str
     placement_count: int
@@ -99,6 +101,8 @@ def ensure_schema(conn: duckdb.DuckDBPyConnection) -> None:
             source VARCHAR NOT NULL,
             PRIMARY KEY (candidate_id, game_id)
         );
+        ALTER TABLE duplicate_review_records ADD COLUMN IF NOT EXISTS source_game_id BIGINT;
+        ALTER TABLE duplicate_review_records ADD COLUMN IF NOT EXISTS canonical_game_id BIGINT;
         CREATE TABLE IF NOT EXISTS duplicate_review_decisions (
             candidate_id BIGINT NOT NULL,
             decision VARCHAR NOT NULL,
@@ -109,29 +113,41 @@ def ensure_schema(conn: duckdb.DuckDBPyConnection) -> None:
 
 
 def load_games(conn: duckdb.DuckDBPyConnection) -> list[GameRecord]:
+    if not conn.execute(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema='main' AND table_name='game_source_records'"
+    ).fetchone():
+        raise RuntimeError("game_source_records is required; run migrate_game_provenance.py first")
     status_join = "LEFT JOIN location_statuses ls ON ls.location_id = lg.location_id"
     active = "COALESCE(ls.status, 'active') NOT IN ('closed', 'replaced')"
     data = rows(conn, f"""
-        SELECT g.game_id, g.name, COALESCE(g.manufacturer, '') manufacturer,
+        SELECT gsr.game_id canonical_game_id,
+               COALESCE(gsr.legacy_game_id, gsr.game_id) game_id,
+               gsr.source_game_id,
+               gsr.source,
+               COALESCE(NULLIF(gsr.source_name, ''), g.name) name,
+               COALESCE(gsr.source_manufacturer, g.manufacturer, '') manufacturer,
                COUNT(lg.location_id) placement_count,
                COUNT(lg.location_id) FILTER (WHERE {active}) active_placement_count,
                string_agg(DISTINCT NULLIF(lower(lg.cabinet_type), ''), '|') cabinet_types,
                string_agg(DISTINCT CAST(lg.year AS VARCHAR), '|') years
-        FROM games g
-        LEFT JOIN location_games lg ON lg.game_id = g.game_id
+        FROM game_source_records gsr
+        JOIN games g ON g.game_id = gsr.game_id
+        LEFT JOIN location_games lg ON lg.game_id = COALESCE(gsr.legacy_game_id, gsr.game_id)
         {status_join}
-        GROUP BY g.game_id, g.name, g.manufacturer
+        GROUP BY gsr.game_id, gsr.legacy_game_id, gsr.source_game_id, gsr.source,
+                 gsr.source_name, gsr.source_manufacturer, g.name, g.manufacturer
     """)
     result = []
     for row in data:
         cabinet_types = tuple(sorted(x for x in (row["cabinet_types"] or "").split("|") if x))
         years = tuple(sorted(int(x) for x in (row["years"] or "").split("|") if x and x.isdigit()))
         result.append(GameRecord(
-            game_id=int(row["game_id"]), name=str(row["name"] or ""),
+            game_id=int(row["game_id"]), canonical_game_id=int(row["canonical_game_id"]),
+            source_game_id=int(row["source_game_id"]), name=str(row["name"] or ""),
             manufacturer=str(row["manufacturer"] or ""),
             placement_count=int(row["placement_count"] or 0),
             active_placement_count=int(row["active_placement_count"] or 0),
-            cabinet_types=cabinet_types, years=years, source=source_for(int(row["game_id"])),
+            cabinet_types=cabinet_types, years=years, source=str(row["source"] or ""),
         ))
     return [game for game in result if game.name.strip()]
 
@@ -177,6 +193,18 @@ def candidate_groups(games: Iterable[GameRecord]) -> list[list[GameRecord]]:
     for key, cluster in buckets.items():
         if len(cluster) < 2:
             continue
+        # Source records already mapped to one canonical identity are not
+        # duplicate candidates; they are already provenance-resolved.
+        if len({game.canonical_game_id for game in cluster}) < 2:
+            continue
+        representatives: dict[int, GameRecord] = {}
+        for game in cluster:
+            current = representatives.get(game.canonical_game_id)
+            if current is None or game.active_placement_count > current.active_placement_count:
+                representatives[game.canonical_game_id] = game
+        cluster = list(representatives.values())
+        if len(cluster) < 2:
+            continue
         # Very short/generic titles are retained for review only when another
         # field provides disambiguation; never silently merge them.
         if normalize(next(iter(cluster)).name) in AMBIGUOUS_NAMES:
@@ -188,7 +216,7 @@ def candidate_groups(games: Iterable[GameRecord]) -> list[list[GameRecord]]:
 
 
 def candidate_id(group: list[GameRecord]) -> int:
-    key = ":".join(str(game.game_id) for game in group)
+    key = ":".join(f"{game.source}:{game.source_game_id}" for game in group)
     digest = hashlib.sha1(key.encode()).hexdigest()[:15]
     return int(digest, 16) % 9_000_000_000_000_000_000
 
@@ -197,7 +225,7 @@ def write_candidates(conn: duckdb.DuckDBPyConnection, groups: list[list[GameReco
     timestamp = utc_now()
     for group in groups:
         cid = candidate_id(group)
-        key = ":".join(str(game.game_id) for game in group)
+        key = ":".join(f"{game.source}:{game.source_game_id}" for game in group)
         scores = [pair_score(left, right) for i, left in enumerate(group) for right in group[i + 1:]]
         match_score = round(min(scores), 1)
         affected = sum(game.active_placement_count for game in group)
@@ -217,16 +245,21 @@ def write_candidates(conn: duckdb.DuckDBPyConnection, groups: list[list[GameReco
         for game in group:
             conn.execute("""
                 INSERT INTO duplicate_review_records
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (candidate_id, game_id, name, manufacturer, placement_count,
+                     active_placement_count, cabinet_types, years, source,
+                     source_game_id, canonical_game_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (candidate_id, game_id) DO UPDATE SET
                     name=excluded.name, manufacturer=excluded.manufacturer,
                     placement_count=excluded.placement_count,
                     active_placement_count=excluded.active_placement_count,
                     cabinet_types=excluded.cabinet_types, years=excluded.years,
-                    source=excluded.source
-            """, (cid, game.game_id, game.name, game.manufacturer,
+                    source=excluded.source, source_game_id=excluded.source_game_id,
+                    canonical_game_id=excluded.canonical_game_id
+            """, (cid, game.canonical_game_id, game.name, game.manufacturer,
                   game.placement_count, game.active_placement_count,
-                  ", ".join(game.cabinet_types), ", ".join(map(str, game.years)), game.source))
+                  ", ".join(game.cabinet_types), ", ".join(map(str, game.years)),
+                  game.source, game.source_game_id, game.canonical_game_id))
     conn.commit()
 
 
@@ -241,7 +274,7 @@ def print_queue(conn: duckdb.DuckDBPyConnection, limit: int) -> None:
     for candidate in candidates:
         records = rows(conn, """
             SELECT game_id, name, manufacturer, placement_count, active_placement_count,
-                   cabinet_types, years, source
+                   cabinet_types, years, source, source_game_id, canonical_game_id
             FROM duplicate_review_records WHERE candidate_id = ? ORDER BY active_placement_count DESC, game_id
         """, (candidate["candidate_id"],))
         print(json.dumps({"candidate": candidate, "records": records}, ensure_ascii=False))
