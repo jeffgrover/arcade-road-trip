@@ -144,6 +144,52 @@ class GoogleMapsClosureScanTests(unittest.TestCase):
         self.assertEqual(scan.status, "matched")
         self.assertEqual(scan.signal_counts["temporary_closure"], 0)
 
+    def test_historical_owner_post_does_not_set_current_closure_status(self):
+        scan = scan_from_signals(
+            "Round1 Bowling Arcade Moreno Valley",
+            "https://example.test",
+            PageSignals(
+                body_text="Round1 Open",
+                title="Round1 Bowling & Arcade - Moreno Valley - Google Maps",
+                primary_name="Round1 Bowling & Arcade - Moreno Valley",
+                primary_text=(
+                    "Round1 Bowling & Arcade - Moreno Valley\nOpen · Closes 2 AM\nDirections\n"
+                    "From the owner\nWe were temporarily closed due to the mall shutdown and have reopened."
+                ),
+                aria_labels=("Address: 22500 Town Cir #2030, Moreno Valley, CA 92553",),
+            ),
+            expected_name="Round1 Bowling & Arcade (Moreno Valley Mall)",
+            expected_address="22500 Town Cir #2030 Moreno Valley CA 92553",
+            expected_city="Moreno Valley",
+            expected_street_address="22500 Town Cir #2030",
+        )
+
+        self.assertEqual(scan.status, "matched")
+        self.assertEqual(scan.signal_counts["temporary_closure"], 0)
+
+    def test_addressless_source_requires_resolved_city_to_match(self):
+        scan = scan_from_signals(
+            "Gearbox Software Plano TX",
+            "https://example.test",
+            PageSignals(
+                body_text="Gearbox Software Open",
+                title="Gearbox Software - Google Maps",
+                primary_name="Gearbox Software",
+                primary_text="Gearbox Software Open Directions Website",
+                aria_labels=("Address: 5757 Main St, Frisco, TX 75034",),
+            ),
+            expected_name="Gearbox Software",
+            expected_address="Plano TX",
+            expected_city="Plano",
+            expected_street_address="Plano, TX",
+            place_id="ChIJgearbox",
+        )
+
+        self.assertEqual(scan.status, "needs_review")
+        self.assertLess(scan.confidence, 0.6)
+        self.assertIn("geography match False", scan.notes)
+        self.assertIsNone(scan.metadata.google_place_id)
+
     def test_mismatched_primary_place_cannot_mark_location_closed_or_write_metadata(self):
         scan = scan_from_signals(
             "The Arcade at Sunrise Mall Corpus Christi TX",

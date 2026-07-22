@@ -100,6 +100,8 @@ class ScanWorkItem:
     query: str
     expected_name: str | None = None
     expected_address: str | None = None
+    expected_city: str | None = None
+    expected_street_address: str | None = None
     candidate_place_id: str | None = None
 
 
@@ -217,6 +219,15 @@ def text_similarity(expected: str | None, actual: str | None) -> float:
     return SequenceMatcher(None, left, right).ratio() if left and right else 0.0
 
 
+def current_place_status_text(value: str) -> str:
+    match = re.search(
+        r"(?:^|\n)\s*(?:from the owner|updates? from|review summary|reviews)\b",
+        value,
+        flags=re.IGNORECASE,
+    )
+    return value[: match.start()] if match else value
+
+
 def extract_first(pattern: str, text: str) -> str | None:
     match = re.search(pattern, text, flags=re.IGNORECASE)
     return compact_text(match.group(1)) if match else None
@@ -275,9 +286,12 @@ def scan_from_signals(
     signals: PageSignals,
     expected_name: str | None = None,
     expected_address: str | None = None,
+    expected_city: str | None = None,
+    expected_street_address: str | None = None,
     place_id: str | None = None,
 ) -> ClosureScan:
-    text = compact_text(signals.primary_text or signals.body_text)
+    raw_text = signals.primary_text or signals.body_text
+    text = compact_text(current_place_status_text(raw_text))
     lower = text.lower()
     matched_name = compact_text(signals.primary_name) or infer_place_name(signals, query)
     metadata = extract_place_metadata(signals)
@@ -285,20 +299,29 @@ def scan_from_signals(
     if expected_name:
         name_score = place_name_score(expected_name, signals.primary_name)
         address_score = text_similarity(expected_address, metadata.address)
-        identity_matches = name_score >= 0.60 or (name_score >= 0.40 and address_score >= 0.75)
+        geography_matches = True
+        has_specific_street = bool(re.search(r"\d", expected_street_address or ""))
+        if not has_specific_street and expected_city and metadata.address:
+            expected_city_text = normalized_name(expected_city)
+            geography_matches = expected_city_text in normalized_name(metadata.address)
+        identity_matches = (
+            name_score >= 0.60 or (name_score >= 0.40 and address_score >= 0.75)
+        ) and geography_matches
         if not identity_matches:
+            review_confidence = min(0.59, max(name_score, address_score * 0.5))
             return ClosureScan(
                 query=query,
                 url=url,
                 status="needs_review",
-                confidence=max(name_score, address_score * 0.5),
+                confidence=review_confidence,
                 matched_name=matched_name,
                 metadata=PlaceMetadata(),
                 notes=(
                     "Google Maps did not resolve an exact primary place for the requested location "
-                    f"(name score {name_score:.2f}, address score {address_score:.2f})."
+                    f"(name score {name_score:.2f}, address score {address_score:.2f}, "
+                    f"geography match {geography_matches})."
                 ),
-                raw_text=text,
+                raw_text=compact_text(raw_text),
                 signal_counts={"permanent_closure": 0, "temporary_closure": 0, "place_cues": 0},
                 match_kind=match_kind,
             )
@@ -441,6 +464,8 @@ async def scan_query(
     settle_ms: int,
     expected_name: str | None = None,
     expected_address: str | None = None,
+    expected_city: str | None = None,
+    expected_street_address: str | None = None,
     place_id: str | None = None,
 ) -> ClosureScan:
     url = build_maps_search_url(query, place_id)
@@ -451,6 +476,8 @@ async def scan_query(
         signals,
         expected_name=expected_name,
         expected_address=expected_address,
+        expected_city=expected_city,
+        expected_street_address=expected_street_address,
         place_id=place_id,
     )
 
@@ -684,6 +711,8 @@ def make_location_work_items(locations: Iterable[dict[str, Any]]) -> list[ScanWo
                 for field in ("street_address", "city", "state", "postal_code")
                 if row.get(field)
             ),
+            expected_city=row.get("city"),
+            expected_street_address=row.get("street_address"),
             candidate_place_id=row.get("candidate_place_id"),
         )
         for row in locations
@@ -886,6 +915,8 @@ async def scan_work_items(
                 args.settle_ms,
                 expected_name=item.expected_name,
                 expected_address=item.expected_address,
+                expected_city=item.expected_city,
+                expected_street_address=item.expected_street_address,
                 place_id=item.candidate_place_id,
             )
         except Exception as exc:

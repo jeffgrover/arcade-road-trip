@@ -55,7 +55,7 @@ def repair_scan_damage(
     conn.execute(f"ATTACH {sql_literal(baseline_db)} AS scan_baseline (READ_ONLY)")
     try:
         baseline_website = (
-            "CASE WHEN lower(COALESCE(baseline.website_url, '')) LIKE '%maps.m.en.%' "
+            "CASE WHEN lower(COALESCE(baseline.website_url, '')) LIKE '%maps.m.en%' "
             "THEN NULL ELSE baseline.website_url END"
         )
         field_difference = " OR ".join(
@@ -86,8 +86,7 @@ def repair_scan_damage(
             f"""
             SELECT COUNT(*)
             FROM locations current
-            WHERE lower(COALESCE(current.website_url, '')) LIKE '%maps.m.en.%'
-            {protected_current}
+            WHERE lower(COALESCE(current.website_url, '')) LIKE '%maps.m.en%'
             """
         ).fetchone()[0]
         preserved_closures = conn.execute(
@@ -154,8 +153,7 @@ def repair_scan_damage(
             conn.execute(
                 f"""
                 UPDATE locations AS current SET website_url = NULL
-                WHERE lower(COALESCE(current.website_url, '')) LIKE '%maps.m.en.%'
-                {protected_current}
+                WHERE lower(COALESCE(current.website_url, '')) LIKE '%maps.m.en%'
                 """
             )
             conn.execute(
