@@ -12,7 +12,7 @@ from typing import Optional
 
 import duckdb
 
-from arcade_db import execute_script, rows
+from arcade_db import execute_script, has_table, rows
 
 
 SOURCE_OFFSETS = {"pinballmap": 1_000_000_000, "ziv": 2_000_000_000}
@@ -57,6 +57,9 @@ def source_for_legacy_id(game_id: int) -> tuple[str, int] | None:
 
 def canonical_id(conn: duckdb.DuckDBPyConnection, game_id: int) -> int:
     """Resolve old canonical links transitively while they still exist."""
+    if not has_table(conn, "game_canonical_links"):
+        return int(game_id)
+
     seen: set[int] = set()
     current = int(game_id)
     while current not in seen:
