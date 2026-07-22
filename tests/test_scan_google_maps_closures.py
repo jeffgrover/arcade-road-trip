@@ -11,10 +11,12 @@ from scan_google_maps_closures import (
     ensure_schema,
     extract_place_metadata,
     failed_scan,
+    load_legacy_review_candidates,
     load_scan_candidates,
     location_query,
     next_delay,
     parse_closure_signal,
+    public_website_url,
     record_scan,
     scan_from_signals,
 )
@@ -27,6 +29,14 @@ class GoogleMapsClosureScanTests(unittest.TestCase):
         self.assertEqual(
             url,
             "https://www.google.com/maps/search/?api=1&query=Disney+Quest+Orlando+FL",
+        )
+
+    def test_build_maps_search_url_can_target_a_place_id(self):
+        url = build_maps_search_url("Disney Quest Orlando FL", "ChIJclosed")
+
+        self.assertEqual(
+            url,
+            "https://www.google.com/maps/search/?api=1&query=Disney+Quest+Orlando+FL&query_place_id=ChIJclosed",
         )
 
     def test_location_query_includes_name_address_and_city(self):
@@ -60,8 +70,7 @@ class GoogleMapsClosureScanTests(unittest.TestCase):
             PageSignals(
                 body_text="Disney Quest Permanently closed Directions",
                 title="Disney Quest - Google Maps",
-                aria_labels=("Permanently closed", "Directions to Disney Quest"),
-                meta_text="Permanently closed",
+                primary_text="Disney Quest Permanently closed Permanently closed Directions",
             ),
         )
 
@@ -105,12 +114,74 @@ class GoogleMapsClosureScanTests(unittest.TestCase):
     def test_extract_website_from_body_text_when_link_is_missing(self):
         metadata = extract_place_metadata(
             PageSignals(
-                body_text="Arcade Monsters Oviedo Open arcademonsters.com Directions Reviews",
+                body_text="Arcade Monsters Oviedo Open Website: arcademonsters.com Directions Reviews",
                 title="Arcade Monsters Oviedo - Google Maps",
+                primary_text="Arcade Monsters Oviedo Open Website: arcademonsters.com Directions Reviews",
             )
         )
 
         self.assertEqual(metadata.website_url, "https://arcademonsters.com")
+
+    def test_public_website_unwraps_google_redirect_and_blocks_internal_domains(self):
+        wrapped = "https://www.google.com/url?q=https%3A%2F%2Fexample.com%2Fgames&sa=U"
+
+        self.assertEqual(public_website_url(wrapped), "https://example.com/games")
+        self.assertIsNone(public_website_url("https://maps.m.en.frdwtwqaacw.es"))
+
+    def test_unrelated_result_closure_does_not_close_exact_primary_place(self):
+        scan = scan_from_signals(
+            "Arcade At OWA 106 South OWA Boulevard Foley AL",
+            "https://example.test",
+            PageSignals(
+                body_text="Arcade at OWA Open Clash eSports Temporarily closed",
+                title="Arcade at OWA - Google Maps",
+                primary_name="Arcade at OWA",
+                primary_text="Arcade at OWA Open · Closes 10 PM Website Directions",
+            ),
+            expected_name="Arcade At OWA",
+        )
+
+        self.assertEqual(scan.status, "matched")
+        self.assertEqual(scan.signal_counts["temporary_closure"], 0)
+
+    def test_mismatched_primary_place_cannot_mark_location_closed_or_write_metadata(self):
+        scan = scan_from_signals(
+            "The Arcade at Sunrise Mall Corpus Christi TX",
+            "https://example.test",
+            PageSignals(
+                body_text="Texas Treasures Permanently closed",
+                title="Texas Treasures - Google Maps",
+                primary_name="Texas Treasures",
+                primary_text="Texas Treasures Permanently closed Directions",
+                app_state='["ChIJwrong",27.7,-97.3]',
+            ),
+            expected_name="The Arcade at Sunrise Mall",
+            place_id="ChIJwrong",
+        )
+
+        self.assertEqual(scan.status, "needs_review")
+        self.assertEqual(scan.signal_counts["permanent_closure"], 0)
+        self.assertIsNone(scan.metadata.google_place_id)
+        self.assertEqual(scan.match_kind, "place_id_url_v2")
+
+    def test_shortened_place_name_with_matching_address_can_confirm_closure(self):
+        scan = scan_from_signals(
+            "Grinkers Grand Palace 228 E Plaza Dr Eagle ID 83616",
+            "https://example.test",
+            PageSignals(
+                body_text="Grinkers Permanently closed",
+                title="Grinkers - Google Maps",
+                primary_name="Grinkers",
+                primary_text="Grinkers Permanently closed 228 E Plaza Dr Eagle ID 83616 Directions",
+                aria_labels=("Address: 228 E Plaza Dr, Eagle, ID 83616",),
+            ),
+            expected_name="Grinkers Grand Palace",
+            expected_address="228 E Plaza Dr Eagle ID 83616",
+            place_id="ChIJgrinkers",
+        )
+
+        self.assertEqual(scan.status, "closed")
+        self.assertGreaterEqual(scan.confidence, 0.9)
 
     def test_parse_temporarily_closed_signal_needs_review(self):
         scan = parse_closure_signal(
@@ -196,6 +267,47 @@ class GoogleMapsClosureScanTests(unittest.TestCase):
             conn.close()
 
         self.assertEqual([row["location_id"] for row in candidates], [1])
+
+    def test_load_legacy_review_candidates_skips_v2_and_matched_rows(self):
+        conn = duckdb.connect(":memory:")
+        try:
+            ensure_schema(conn)
+            conn.execute(
+                """
+                CREATE TABLE locations (
+                    location_id BIGINT, name VARCHAR, street_address VARCHAR, city VARCHAR,
+                    state VARCHAR, postal_code VARCHAR, game_count INTEGER,
+                    google_place_id VARCHAR
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO locations VALUES
+                    (1, 'Legacy Closed', '1 Main', 'Orlando', 'FL', '32830', 20, NULL),
+                    (2, 'Legacy Matched', '2 Main', 'Orlando', 'FL', '32830', 10, NULL),
+                    (3, 'Already V2', '3 Main', 'Orlando', 'FL', '32830', 30, NULL)
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO location_verifications (
+                    verification_id, location_id, checked_at, provider, status, match_kind, raw_json
+                ) VALUES
+                    (1, 1, '2026-07-01T00:00:00+00:00', 'google_maps_url', 'closed', 'search_url',
+                     '{"place_metadata":{"google_place_id":"ChIJlegacy"}}'),
+                    (2, 2, '2026-07-01T00:00:00+00:00', 'google_maps_url', 'matched', 'search_url', '{}'),
+                    (3, 3, '2026-07-01T00:00:00+00:00', 'google_maps_url', 'closed', 'search_url', '{}'),
+                    (4, 3, '2026-07-02T00:00:00+00:00', 'google_maps_url', 'needs_review', 'place_id_url_v2', '{}')
+                """
+            )
+
+            rows = load_legacy_review_candidates(conn, limit=10)
+        finally:
+            conn.close()
+
+        self.assertEqual([row["location_id"] for row in rows], [1])
+        self.assertEqual(rows[0]["candidate_place_id"], "ChIJlegacy")
 
     def test_record_scan_can_mark_explicit_closed_status(self):
         conn = duckdb.connect(":memory:")

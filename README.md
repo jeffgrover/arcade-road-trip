@@ -106,6 +106,8 @@ one deployable HTML artifact:
 - `generate_static_app.py`: primary generator for `static/arcade_road_trip.html`.
 - `scan_google_maps_closures.py`: explicit slow Google Maps URL closure probe
   for review-led status curation.
+- `repair_google_maps_scan.py`: conservative repair for legacy Maps scans that
+  restores pre-scan metadata and demotes whole-results-page closure evidence.
 
 This repository grew out of an Aurcade scrape, then merged in Pinball Map and
 Zenius -I- vanisher data. The database keeps the original Aurcade-compatible
@@ -134,6 +136,19 @@ curation directory after its long-running scan completes.
 Active/inactive location status vocabulary is centralized in `arcade_db.py`.
 The CLI and static atlas data builders use that shared definition so closed or
 replaced locations do not drift into UI counts by accident.
+
+Google Maps closure scans require an exact primary-place identity before they
+can update metadata or mark a location closed. Legacy `search_url` closed and
+review results can be rechecked in bounded, resumable batches; completed v2
+rows automatically leave this queue:
+
+```bash
+.venv/bin/python scan_google_maps_closures.py \
+  --recheck-legacy --loop --max-scans 100 --apply
+```
+
+Keep the default randomized delay for unattended runs. Use
+`--max-runtime-minutes` or `--max-scans` to bound one process invocation.
 
 ## Static Serving
 
