@@ -5,12 +5,58 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="refresh" content="0; url=static/arcade_road_trip.html" />
   <title>Arcade Road Trip</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Chakra+Petch:wght@400;600;700&family=Monoton&family=Press+Start+2P&display=swap" />
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 2rem; color: #15202b; }
-    a { color: #007c89; font-weight: 700; }
+    :root { --pink:#ff2d95; --cyan:#25e6ff; --violet:#8b5cff; --gold:#ffd23f; }
+    * { box-sizing:border-box; }
+    html,body { height:100%; }
+    body {
+      margin:0; min-height:100%; display:flex; align-items:center; justify-content:center; text-align:center;
+      font-family:'Chakra Petch',system-ui,-apple-system,Segoe UI,sans-serif; color:#f3ecff; padding:2rem;
+      background:
+        radial-gradient(1000px 600px at 50% -10%, rgba(255,45,149,.25), transparent 60%),
+        radial-gradient(900px 520px at 85% 0%, rgba(37,230,255,.16), transparent 55%),
+        linear-gradient(180deg,#0a0420 0%,#06020f 46%,#0b0322 100%);
+      background-attachment:fixed; overflow:hidden;
+    }
+    body::before {
+      content:""; position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.5;
+      background-image:linear-gradient(rgba(139,92,255,.18) 1px,transparent 1px),linear-gradient(90deg,rgba(139,92,255,.18) 1px,transparent 1px);
+      background-size:46px 46px;
+      -webkit-mask-image:radial-gradient(circle at 50% 118%,#000 0%,rgba(0,0,0,.5) 42%,transparent 74%);
+      mask-image:radial-gradient(circle at 50% 118%,#000 0%,rgba(0,0,0,.5) 42%,transparent 74%);
+    }
+    .wrap { position:relative; z-index:1; }
+    .brand {
+      font-family:'Monoton',cursive; font-size:clamp(30px,8vw,72px); line-height:1.05; color:#fff; margin:0;
+      text-shadow:0 0 8px #ff2d95,0 0 22px #ff2d95,0 0 44px rgba(255,45,149,.7),0 0 70px rgba(37,230,255,.35);
+    }
+    .road { position:relative; height:5px; margin:26px auto 22px; max-width:520px; overflow:hidden;
+      background:linear-gradient(90deg,rgba(255,45,149,.12),rgba(37,230,255,.22),rgba(255,45,149,.12)); }
+    .road::before { content:""; position:absolute; inset:0;
+      background:repeating-linear-gradient(90deg,var(--gold) 0 26px,transparent 26px 56px);
+      filter:drop-shadow(0 0 6px rgba(255,210,63,.9)); animation:roadmove 1.2s linear infinite; }
+    @keyframes roadmove { to { transform:translateX(-56px); } }
+    .coin { font-family:'Press Start 2P',monospace; font-size:clamp(10px,2.4vw,14px); letter-spacing:.12em;
+      color:var(--cyan); text-shadow:0 0 10px rgba(37,230,255,.8); animation:blink 1.1s steps(1,end) infinite; }
+    @keyframes blink { 50% { opacity:.15; } }
+    p { margin:16px 0 0; color:#cdbdf2; font-size:15px; }
+    a { font-family:'Bungee',system-ui,sans-serif; font-size:15px; letter-spacing:.03em; text-transform:uppercase;
+      color:#04263a; text-decoration:none; padding:11px 18px; border-radius:9px; display:inline-block; margin-top:6px;
+      background:linear-gradient(180deg,#7cf3ff,#25e6ff 55%,#12c8ee);
+      box-shadow:0 0 16px rgba(37,230,255,.55),inset 0 1px 0 rgba(255,255,255,.55); transition:.16s; }
+    a:hover { filter:brightness(1.08); box-shadow:0 0 26px rgba(37,230,255,.85); transform:translateY(-1px); }
+    @media (prefers-reduced-motion:reduce) { .road::before,.coin { animation:none; } }
   </style>
 </head>
 <body>
-  <p>Opening <a href="static/arcade_road_trip.html">Arcade Road Trip Atlas</a>...</p>
+  <div class="wrap">
+    <h1 class="brand">Arcade Road Trip</h1>
+    <div class="road" aria-hidden="true"></div>
+    <div class="coin">Insert coin to continue</div>
+    <p>Opening the <a href="static/arcade_road_trip.html">Arcade Road Trip Atlas</a>&hellip;</p>
+  </div>
 </body>
 </html>
